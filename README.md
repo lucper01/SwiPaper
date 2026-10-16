@@ -3,6 +3,14 @@
 Swipaper est une application de veille scientifique qui permet de découvrir des publications récentes, de consulter leurs résumés et de sélectionner les articles pertinents par *swipe*.
 
 ## Explorer la littérature scientifique
+- Recherche immédiate depuis la page Découvrir, sans obligation de créer une thématique.
+- Requêtes logiques avec AND, OR, NOT, parenthèses et expressions exactes entre guillemets.
+- Recherche ciblée sur les titres seuls ou sur les titres et résumés, avec vérification de chaque résultat avant affichage.
+- Filtrage par type de publication (article, revue ou prépublication).
+- Espace de travail à deux panneaux sur ordinateur : recherche et filtres à gauche, cartes d'articles à droite.
+- Interface mobile privilégiant la carte à swiper, avec possibilité d'afficher les filtres.
+- Identité visuelle crème et vert forêt, logo représentant la girafe scientifique Swipaper.
+
 
 - Recherche de publications scientifiques à partir de thématiques créées par l'utilisateur, sans thématiques imposées.
 - Création, modification et suppression de thématiques, avec mots-clés personnalisés.

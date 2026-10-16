@@ -153,8 +153,8 @@ function setup(){
 function paperCard(a){
   const authors=a.authors.slice(0,4).join(', ')+(a.authors.length>4?' et al.':'');
   return '<article class="paper-card" id="swipe-card" aria-label="Publication : '+esc(a.title)+'">'+
-    '<div class="card-top"><span class="tag">✦ '+esc(a.topic||'Publication')+'</span><span class="tag alt">'+esc(a.year||'Année inconnue')+'</span>'+(a.openAccess?'<span class="tag">◌ Open access</span>':'')+'</div>'+
-    '<div class="paper-topline"><span>YOUR NEXT RESEARCH MATCH</span><span>♥</span></div><h2>'+esc(a.title)+'</h2><p class="authors">'+esc(authors||'Auteurs non renseignés')+'</p><p class="journal">'+esc(a.journal||'Source scientifique')+' '+(a.date?' · '+esc(a.date):'')+'</p>'+ 
+    '<div class="card-top"><span class="tag">'+esc(a.topic||'Publication')+'</span><span class="tag alt">'+esc(a.year||'Année inconnue')+'</span><span class="tag alt">'+esc(a.kind==='preprint'?'Prépublication':a.kind==='review'?'Revue / synthèse':'Article')+'</span>'+(a.openAccess?'<span class="tag">✓ Accès ouvert</span>':'')+'</div>'+
+    '<div class="paper-topline"><span>YOUR NEXT RESEARCH MATCH</span><span>♥</span></div><h2>'+esc(a.title)+'</h2><p class="authors">'+esc(authors||'Auteurs non renseignés')+'</p><p class="journal">'+esc(a.journal||'Source scientifique')+' '+(a.date?' · '+esc(a.date):'')+' · '+esc(a.source||'Base scientifique')+'</p>'+ 
     '<div class="match-summary"><span class="match-score">'+(Number.isFinite(a.relevanceScore)?a.relevanceScore+'/100':'Recherche vérifiée')+'</span><div><strong>Correspondance vérifiée</strong><small>'+esc((a.scope==='title'?'Dans le titre':'Dans le titre ou le résumé')+' · '+(a.matchingTerms?.length||0)+' terme(s) trouvé(s)')+'</small></div></div><hr>'+
     '<p class="muted-label">LE RÉSUMÉ</p><p class="abstract">'+esc(a.abstract||'Résumé indisponible.')+'</p>'+
     '<div class="matched-chips">'+(a.matchingTerms||[]).slice(0,6).map(term=>'<span class="matched-chip">✓ '+esc(term)+'</span>').join('')+'</div>'+

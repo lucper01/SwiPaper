@@ -46,3 +46,13 @@ test('query translation to providers scopes title and abstract',()=>{
   assert.equal(themeScope({scope:'title'}),'title');
   assert.equal(themeScope({}),'title_abstract');
 });
+
+test('Strict query scope prevents unrelated articles when a provider returns broad matches',()=>{
+  const ast=parseScientificQuery('(olfaction OR smell) AND (vision OR audition) NOT review');
+  const list=[
+    {title:'Audition and olfaction in multisensory integration',abstract:'A new experimental study'},
+    {title:'Olfaction under anesthesia',abstract:'A controlled study'},
+    {title:'Visual integration in reviews',abstract:'Review of olfaction'},
+  ];
+  assert.deepEqual(list.map(a=>evaluateScientificArticle(a,ast).matches),[true,false,false]);
+});

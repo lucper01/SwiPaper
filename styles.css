@@ -56,3 +56,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media(max-width:720px){.sidebar{display:none}.topbar{height:58px;padding:0 16px}.topbar .breadcrumbs .tiny{display:none}.topbar .breadcrumbs{font-size:13px}.mobile-nav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;z-index:100;bottom:0;left:0;right:0;padding:8px 0 calc(8px + env(safe-area-inset-bottom));background:#fffffff2;backdrop-filter:blur(12px);border-top:1px solid #e0e9dc}.mobile-nav button{display:flex;align-items:center;flex-direction:column;gap:1px;color:#98a99c;background:transparent;border:0;font-size:21px}.mobile-nav button.active{color:#237048}.mobile-nav button small{font-size:9px;font-weight:800}#view{padding:21px 13px 108px}.discover-hero h1{font-size:26px}.discover-hero p{font-size:11px}.discover-workspace{gap:14px}.research-panel,.result-panel{padding:16px}.form-row,.filter-grid{grid-template-columns:1fr 1fr}.preview-placeholder{min-height:300px}.paper-card{min-height:380px;padding:17px}.paper-card h2{font-size:20px}.paper-card .abstract{font-size:12px;max-height:200px}.giraffe-control-row{height:45px}.swipe-actions{margin-top:21px}.page-heading{flex-direction:column;align-items:start;gap:13px}.page-subtitle{font-size:12px}.page-title{font-size:27px}.list-card{flex-direction:column;gap:10px}.toast{bottom:89px;left:14px;right:14px}.research-filters-collapsed .research-panel{display:none}.mobile-filter-summary{display:block}}
 @media(max-width:430px){.form-row,.filter-grid{grid-template-columns:1fr}.source-options{grid-template-columns:1fr 1fr}.paper-card h2{font-size:18px}.match-summary{padding:8px}.match-score{min-width:58px;height:58px}.swipe-actions{gap:16px}.circle-btn{width:54px;height:54px}.circle-btn.like{height:63px;width:63px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+.mobile-brand{display:none;align-items:center;gap:8px;color:#17563d;font:800 17px Manrope,sans-serif}.mobile-brand img{width:32px;height:32px;border-radius:9px}
+@media(min-width:721px){.discover-workspace .research-form-body{display:block!important}.discover-workspace .result-panel [data-act="toggle-search-pane"]{display:none}}
+@media(max-width:720px){
+ .mobile-brand{display:flex}.topbar .breadcrumbs{display:none}
+ .discover-workspace.has-active{display:flex;flex-direction:column}
+ .discover-workspace.has-active>.result-panel{order:1;width:100%;padding:12px 13px 18px}
+ .discover-workspace.has-active>.research-panel{order:2;width:100%}
+ .discover-workspace.has-active:not(.filters-open)>.research-panel{display:none}
+ .discover-workspace.has-active.filters-open>.research-panel{display:block}
+ .discover-workspace.has-active .paper-card{min-height:370px}
+ .discover-workspace.has-active .swipe-help{margin-bottom:10px}
+ .discover-workspace.has-active .giraffe-illustration{width:78px}
+ .discover-workspace.has-active .match-summary{margin:12px 0}
+}
