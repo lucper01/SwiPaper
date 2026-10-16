@@ -1,4 +1,5 @@
 import { toArticle, toEuropePMCArticle, deduplicate, openAlexUrl, europePmcUrl, cutoffFromPeriod, fingerprints, zoteroFingerprints, isFresh, asRIS, asCSV, risFingerprints, zoteroItem, resetLocalLibraryState } from './core.mjs';
+import { parseScientificQuery, compileScientificQuery, evaluateScientificArticle, themeScope } from './search.mjs';
 
 const STORAGE='swipaper-v1-state';
 const TITLES={discover:'Découvrir',library:'Bibliothèque',topics:'Mes thématiques',history:'Historique',settings:'Paramètres'};
@@ -245,14 +246,20 @@ function localFingerprints() {
 }
 async function fetchSource(topic,source,cutoff,page,key) {
   const isPubmed=source==='pubmed';
-  const url=isPubmed?europePmcUrl(topic.query,{cutoff,page,pageSize:75})
-    :openAlexUrl(topic.query,{cutoff,page,perPage:75,key});
+  const parsed=parseScientificQuery(topic.query);
+  const scope=themeScope(topic);
+  const query=compileScientificQuery(parsed,isPubmed?'europepmc':'openalex',scope);
+  const url=isPubmed?europePmcUrl(query,{cutoff,page,pageSize:75})
+    :openAlexUrl(query,{cutoff,page,perPage:75,key,scope});
   const response=await fetch(url,{headers:{Accept:'application/json'}});
   if(!response.ok)throw new Error((isPubmed?'Europe PMC':'OpenAlex')+' HTTP '+response.status);
   const data=await response.json();
-  return (isPubmed?(data.resultList?.result||[]).map(w=>toEuropePMCArticle(w,topic.name))
-    :(data.results||[]).map(w=>toArticle(w,topic.name)))
-    .filter(a=>a.abstract.length>35&&a.date&&a.url);
+  const records=isPubmed?(data.resultList?.result||[]).map(w=>toEuropePMCArticle(w,topic.name))
+    :(data.results||[]).map(w=>toArticle(w,topic.name));
+  return records.filter(a=>a.abstract.length>35&&a.date&&a.url).flatMap(a=>{
+    const assessment=evaluateScientificArticle(a,parsed,scope);
+    return assessment.matches?[{...a,relevanceScore:assessment.score,matchingTerms:assessment.matched,titleTerms:assessment.titleMatched,scope}]:[];
+  });
 }
 async function startSession(form){
   if(loading)return;
@@ -291,14 +298,14 @@ async function startSession(form){
           if(result.value.length<10)active[i].exhausted=true;
         }
       });
-      const fresh=deduplicate(pools.flatMap(p=>p.articles).sort((a,b)=>b.date.localeCompare(a.date)))
+      const fresh=deduplicate(pools.flatMap(p=>p.articles).sort((a,b)=>b.date.localeCompare(a.date)||b.relevanceScore-a.relevanceScore))
         .filter(a=>isFresh(a,{cutoff,seen,zotero}));
       if(fresh.length>=batch||results.every(r=>r.status==='rejected'))break;
     }
     if(pools.every(p=>p.articles.length===0)){
       throw new Error('Toutes les sources sont indisponibles. '+errors.join(' ; '));
     }
-    const merged=deduplicate(pools.flatMap(p=>p.articles).sort((a,b)=>b.date.localeCompare(a.date)))
+    const merged=deduplicate(pools.flatMap(p=>p.articles).sort((a,b)=>b.date.localeCompare(a.date)||b.relevanceScore-a.relevanceScore))
       .filter(a=>isFresh(a,{cutoff,seen,zotero})).slice(0,batch);
     if(!merged.length)throw new Error('Aucun article inédit avec résumé pour cette période : élargissez-la ou changez les mots-clés.');
     state.active={id:uid(),started:new Date().toISOString(),articles:merged,index:0,actions:[],cutoff,sources};
@@ -351,7 +358,7 @@ async function checkNewPapers(manual=false) {
     if(!valid.length)throw new Error('Sources indisponibles ou accès bloqué.');
     const fromLibrary=localFingerprints();
     const zotero=[...(state.prefs.zoteroUser?state.zoteroIndex.keys:[]),...(state.externalIndex?.keys||[])];
-    const found=deduplicate(valid.flatMap(r=>r.value).sort((a,b)=>b.date.localeCompare(a.date)))
+    const found=deduplicate(valid.flatMap(r=>r.value).sort((a,b)=>b.date.localeCompare(a.date)||b.relevanceScore-a.relevanceScore))
       .filter(a=>isFresh(a,{cutoff,seen:fromLibrary,zotero}));
     const known=new Set(state.alerts.known||[]);
     const first=!state.alerts.lastCheck;
@@ -369,17 +376,41 @@ async function checkNewPapers(manual=false) {
   finally{alertLoading=false;render();}
 }
 function renderTopics(){
-  const editing=topicById(topicEditorId)||{id:'',name:'',query:''};
-  const cards=state.topics.map(t=>'<article class="topic-card"><div class="icon-tile">◎</div><h3>'+esc(t.name)+'</h3><p>'+esc(t.query)+'</p><div class="bottom"><span class="tag alt">Thématique active</span><div class="button-row"><button class="text-btn" data-act="edit-topic" data-id="'+esc(t.id)+'">Modifier</button><button class="text-btn danger" data-act="delete-topic" data-id="'+esc(t.id)+'">Supprimer</button></div></div></article>').join('');
-  const searchScholar=(t)=>'https://scholar.google.com/scholar?q='+encodeURIComponent(t.query);
-  root.innerHTML=pageIntro('VOS CENTRES D’INTÉRÊT','Vos thématiques, vos recherches.','Aucune thématique imposée : créez uniquement les sujets que vous souhaitez suivre.')+
-    '<div class="panel" style="margin-bottom:25px"><h2 class="section-title">'+(editing.id?'Modifier la thématique':'Ajouter une thématique')+'</h2>'+
+  const editing=topicById(topicEditorId)||{id:'',name:'',query:'',scope:'title_abstract'};
+  const scope=themeScope(editing);
+  const cards=state.topics.map(t=>{
+    const parsedScope=themeScope(t);
+    return '<article class="topic-card"><div class="icon-tile">⌕</div><div class="topic-scope">'+(parsedScope==='title'?'TITRE UNIQUEMENT':'TITRE + ABSTRACT')+'</div><h3>'+esc(t.name)+'</h3><p class="topic-query-text">'+esc(t.query)+'</p>'+
+      '<div class="bottom"><span class="tag alt">Recherche stricte</span><div class="button-row"><button type="button" class="text-btn" data-act="edit-topic" data-id="'+esc(t.id)+'">Modifier</button><button type="button" class="text-btn danger" data-act="delete-topic" data-id="'+esc(t.id)+'">Supprimer</button></div></div></article>';
+  }).join('');
+  const searchScholar=t=>'https://scholar.google.com/scholar?q='+encodeURIComponent(t.query);
+  root.innerHTML=pageIntro('RECHERCHE AVANCÉE','Vos recherches, vos règles.','Créez une stratégie de recherche précise. Les articles devront réellement correspondre à votre expression logique.')+
+    '<div class="advanced-search-layout"><div class="panel query-panel"><div class="query-header"><span class="eyebrow">'+(editing.id?'MODIFIER LA RECHERCHE':'NOUVELLE THÉMATIQUE')+'</span><span class="query-badge">MOTEUR BOOLÉEN</span></div>'+
     '<form id="topic-form" class="form-stack"><input type="hidden" name="topicId" value="'+esc(editing.id)+'">'+
-    '<div class="form-row"><div class="field"><label for="topic-name">NOM DE LA THÉMATIQUE</label><input id="topic-name" name="topicName" required maxlength="70" placeholder="Ex. Perception temporelle" value="'+esc(editing.name)+'"></div>'+
-    '<div class="field"><label for="topic-query">MOTS-CLÉS DE RECHERCHE</label><input id="topic-query" name="topicQuery" required maxlength="300" placeholder="Ex. temporal binding window multisensory" value="'+esc(editing.query)+'"></div></div>'+
-    '<div class="button-row"><button class="btn" type="submit">'+(editing.id?'Enregistrer les modifications':'＋ Ajouter la thématique')+'</button>'+(editing.id?btn('Annuler','cancel-topic-edit','secondary'):'')+'</div></form></div>'+
-    (state.topics.length?'<h2 class="section-title">Thématiques enregistrées · '+state.topics.length+'</h2><div class="cards-grid">'+cards+'</div>':empty('Aucune thématique pour le moment','Créez votre premier sujet ci-dessus. Vous pourrez en ajouter autant que nécessaire.'))+
-    '<div class="spacer"></div><div class="pill-note">Google Scholar : la recherche automatisée directe n’est pas disponible. '+(state.topics.length?'Ouvrir manuellement dans Scholar : '+state.topics.map(t=>'<a target="_blank" rel="noopener noreferrer" href="'+esc(searchScholar(t))+'">'+esc(t.name)+' ↗</a>').join(' · '):'Vos requêtes pourront être ouvertes dans Google Scholar une fois ajoutées.')+'</div>';
+    '<div class="field"><label for="topic-name">NOM DE VOTRE THÉMATIQUE</label><input id="topic-name" name="topicName" required maxlength="70" placeholder="Ex. Intégration olfactive" value="'+esc(editing.name)+'"></div>'+
+    '<div class="field"><label for="topic-query">EXPRESSION DE RECHERCHE</label>'+
+    '<div class="query-builder"><div class="query-tools">'+['AND','OR','NOT','(',')','"phrase"'].map(t=>'<button type="button" class="query-token" data-act="insert-token" data-token="'+esc(t)+'">'+esc(t)+'</button>').join('')+'</div>'+
+    '<textarea id="topic-query" name="topicQuery" required maxlength="400" rows="5" spellcheck="false" placeholder="(olfaction OR odor) AND (attention OR perception) NOT review">'+esc(editing.query)+'</textarea></div>'+
+    '<small>AND = tous les critères · OR = alternatives · NOT = exclusion · "..." = expression exacte. Sans opérateur, AND est utilisé.</small></div>'+
+    '<div class="field"><label for="topic-scope">RECHERCHER DANS</label><select name="topicScope" id="topic-scope"><option value="title_abstract" '+(scope==='title_abstract'?'selected':'')+'>Titres ET résumés (champ combiné)</option><option value="title" '+(scope==='title'?'selected':'')+'>Titres uniquement (plus strict)</option></select></div>'+
+    '<div id="query-feedback" class="query-feedback" role="status" aria-live="polite"></div>'+
+    '<div class="button-row"><button class="btn" type="submit">'+(editing.id?'Enregistrer les modifications':'Créer ma recherche')+' <span aria-hidden="true">→</span></button>'+(editing.id?btn('Annuler','cancel-topic-edit','secondary'):'')+'</div></form></div>'+
+    '<aside class="search-guide"><p class="eyebrow">EXEMPLE DE STRATÉGIE</p><div class="guide-paper"><span class="tag">LOGIQUE STRICTE</span><h3>La bonne publication. Pas simplement un mot isolé.</h3><code>("olfactory perception" OR olfaction) AND ("temporal integration" OR timing) NOT review</code><p>Chaque résultat doit satisfaire toute l’expression, pas seulement les mots qui ressemblent au thème.</p>'+
+    '<button type="button" data-act="example-query" class="btn secondary">Utiliser cet exemple</button></div><div class="guide-tip"><strong>Recherche dans le titre</strong><p>Choisissez « Titres uniquement » pour imposer la présence de vos critères dans le titre. Pour une recherche plus large, utilisez le titre et le résumé.</p></div></aside></div>'+
+    '<div class="spacer"></div><div class="section-between"><h2 class="section-title">Vos thématiques · '+state.topics.length+'</h2>'+btn('Découvrir des articles','go-discover','secondary small')+'</div>'+
+    (state.topics.length?'<div class="cards-grid">'+cards+'</div>':empty('Commencez avec votre première recherche','Aucune thématique prédéfinie. Créez une stratégie pour découvrir des publications ciblées.'))+
+    '<div class="spacer"></div><div class="pill-note">Google Scholar n’est pas utilisé comme source automatique. '+(state.topics.length?'Rechercher manuellement : '+state.topics.map(t=>'<a href="'+esc(searchScholar(t))+'" rel="noopener noreferrer" target="_blank">'+esc(t.name)+' ↗</a>').join(' · '):'Vos recherches pourront être ouvertes manuellement dans Google Scholar.')+'</div>';
+  updateQueryFeedback();
+}
+function updateQueryFeedback(){
+  const input=el('topic-query'),area=el('query-feedback');
+  if(!input||!area)return;
+  if(!input.value.trim()){area.className='query-feedback';area.textContent='Saisissez vos mots-clés pour vérifier la logique de recherche avant d’enregistrer.';return;}
+  try {
+    const parsed=parseScientificQuery(input.value);
+    area.className='query-feedback valid';
+    area.textContent='✓ Expression valide · '+parsed.positives.length+' critère(s) positif(s)'+(parsed.excluded.length?' · '+parsed.excluded.length+' exclusion(s)':'')+' · Les résultats seront revérifiés après leur récupération.';
+  }catch(error){area.className='query-feedback invalid';area.textContent='✕ '+error.message;}
 }
 function openLibraryReset(){
   if(el('modal-layer'))el('modal-layer').remove();
@@ -539,6 +570,12 @@ document.addEventListener('click',event=>{
   if(act==='go-discover')navigate('discover');
   if(act==='go-topics')navigate('topics');
   if(act==='go-settings')navigate('settings');
+  if(act==='example-query'){
+    const q=el('topic-query');if(q){q.value='("olfactory perception" OR olfaction) AND ("temporal integration" OR timing) NOT review';updateQueryFeedback();q.focus();}
+  }
+  if(act==='insert-token'){
+    const q=el('topic-query');if(q){const val=button.dataset.token==='"phrase"'?'""':button.dataset.token;const left=q.value.slice(0,q.selectionStart),right=q.value.slice(q.selectionEnd);q.value=left+(left&&!/\s$/.test(left)?' ':'')+val+' '+right;q.focus();const at=q.value.indexOf(val,left.length)+(val==='""'?1:val.length);q.setSelectionRange(at,at);updateQueryFeedback();}
+  }
   if(act==='reset-library')openLibraryReset();
   if(act==='confirm-library-reset')resetLocalLibrary();
   if(act==='library-filter'){libraryFilter=button.dataset.filter;render();}
@@ -578,6 +615,7 @@ document.addEventListener('click',event=>{
   if(act==='check-alerts')checkNewPapers(true);
   if(act==='clear-alerts'){state.alerts.unseen=[];saveAndRender();}
 });
+document.addEventListener('input',event=>{if(event.target.id==='topic-query')updateQueryFeedback();});
 document.addEventListener('submit',event=>{
   event.preventDefault();
   const form=event.target;
@@ -586,13 +624,16 @@ document.addEventListener('submit',event=>{
     const fd=new FormData(form);
     const name=String(fd.get('topicName')||'').trim();
     const query=String(fd.get('topicQuery')||'').trim();
+    const scope=String(fd.get('topicScope')||'title_abstract');
     const id=String(fd.get('topicId')||'');
     if(!name||!query){showToast('Nom et mots-clés obligatoires.');return;}
+    if(!['title','title_abstract'].includes(scope)){showToast('Champ de recherche non reconnu.');return;}
+    try{parseScientificQuery(query);}catch(error){showToast('Requête invalide : '+error.message);return;}
     if(id){
       const topic=topicById(id);
       if(!topic){showToast('Thématique introuvable.');return;}
-      topic.name=name;topic.query=query;
-    }else state.topics.push({id:uid(),name,query});
+      topic.name=name;topic.query=query;topic.scope=scope;
+    }else state.topics.push({id:uid(),name,query,scope});
     topicEditorId='';
     state.alerts={lastCheck:null,known:[],unseen:[]};
     saveAndRender();showToast('Thématique enregistrée : '+name);
