@@ -1,0 +1,11 @@
+{
+  "name": "swipaper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Swipaper — interactive scientific literature discovery",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check src/app.js && node --check src/core.mjs"
+  }
+}
