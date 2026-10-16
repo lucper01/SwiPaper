@@ -46,7 +46,7 @@ function pageIntro(label,title,description,extra=''){
   return '<div class="page-heading"><div><p class="eyebrow">'+esc(label)+'</p><h1 class="page-title">'+esc(title)+'</h1><p class="page-subtitle">'+esc(description)+'</p></div>'+extra+'</div>';
 }
 function btn(label,action,cls='secondary',attrs=''){
-  return '<button class="btn '+cls+'" data-act="'+action+'" '+attrs+'>'+label+'</button>';
+  return '<button type="button" class="btn '+cls+'" data-act="'+action+'" '+attrs+'>'+label+'</button>';
 }
 function empty(title,description,action='',label=''){
   return '<div class="empty"><div class="symbol">◈</div><h3>'+esc(title)+'</h3><p>'+esc(description)+'</p>'+(action?btn(esc(label),action,'primary'):'')+'</div>';
@@ -340,15 +340,6 @@ function renderTopics(){
     '<div class="button-row"><button class="btn" type="submit">'+(editing.id?'Enregistrer les modifications':'＋ Ajouter la thématique')+'</button>'+(editing.id?btn('Annuler','cancel-topic-edit','secondary'):'')+'</div></form></div>'+
     (state.topics.length?'<h2 class="section-title">Thématiques enregistrées · '+state.topics.length+'</h2><div class="cards-grid">'+cards+'</div>':empty('Aucune thématique pour le moment','Créez votre premier sujet ci-dessus. Vous pourrez en ajouter autant que nécessaire.'))+
     '<div class="spacer"></div><div class="pill-note">Google Scholar : la recherche automatisée directe n’est pas disponible. '+(state.topics.length?'Ouvrir manuellement dans Scholar : '+state.topics.map(t=>'<a target="_blank" rel="noopener noreferrer" href="'+esc(searchScholar(t))+'">'+esc(t.name)+' ↗</a>').join(' · '):'Vos requêtes pourront être ouvertes dans Google Scholar une fois ajoutées.')+'</div>';
-}
-function openTopicModal(id=''){
-  const t=topicById(id)||{id:'',name:'',query:''};
-  const layer=document.createElement('div');layer.className='modal-layer';layer.id='modal-layer';
-  layer.innerHTML='<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h2 id="modal-title">'+(t.id?'Modifier':'Créer')+' une thématique</h2><p>Définissez le nom et les mots-clés utilisés pour rechercher les publications.</p>'+
-    '<form id="topic-form" class="form-stack"><input type="hidden" name="id" value="'+esc(t.id)+'"><div class="field"><label for="topic-name">Nom de la thématique</label><input id="topic-name" name="name" maxlength="70" required value="'+esc(t.name)+'" placeholder="Ex. Attention visuelle"></div>'+
-    '<div class="field"><label for="topic-query">Mots-clés de recherche</label><textarea id="topic-query" name="query" required maxlength="300" placeholder="Ex. visual attention cognitive control">'+esc(t.query)+'</textarea><small>Privilégiez les termes en anglais pour une recherche bibliographique étendue.</small></div>'+
-    '<div class="actions"><button class="btn secondary" type="button" data-act="close-modal">Annuler</button><button type="submit" class="btn">Enregistrer</button></div></form></div>';
-  document.body.appendChild(layer);el('topic-name').focus();
 }
 function renderLibrary(){
   const all=Object.values(state.library);
