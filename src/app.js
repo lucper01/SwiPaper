@@ -119,9 +119,11 @@ function setup(){
 function paperCard(a){
   const authors=a.authors.slice(0,4).join(', ')+(a.authors.length>4?' et al.':'');
   return '<article class="paper-card" id="swipe-card" aria-label="Publication : '+esc(a.title)+'">'+
-    '<div class="card-top"><span class="tag">'+esc(a.topic||'Publication')+'</span><span class="tag alt">'+esc(a.year||'Année inconnue')+'</span>'+(a.openAccess?'<span class="tag">◌ Accès ouvert</span>':'')+'</div>'+
-    '<h2>'+esc(a.title)+'</h2><p class="authors">'+esc(authors||'Auteurs non renseignés')+'</p><p class="journal">'+esc(a.journal||'Source scientifique')+' '+(a.date?' · '+esc(a.date):'')+'</p><hr>'+
-    '<p class="muted-label">ABSTRACT</p><p class="abstract">'+esc(a.abstract||'Résumé indisponible.')+'</p>'+
+    '<div class="card-top"><span class="tag">✦ '+esc(a.topic||'Publication')+'</span><span class="tag alt">'+esc(a.year||'Année inconnue')+'</span>'+(a.openAccess?'<span class="tag">◌ Open access</span>':'')+'</div>'+
+    '<div class="paper-topline"><span>YOUR NEXT RESEARCH MATCH</span><span>♥</span></div><h2>'+esc(a.title)+'</h2><p class="authors">'+esc(authors||'Auteurs non renseignés')+'</p><p class="journal">'+esc(a.journal||'Source scientifique')+' '+(a.date?' · '+esc(a.date):'')+'</p>'+ 
+    '<div class="match-summary"><span class="match-score">'+(Number.isFinite(a.relevanceScore)?a.relevanceScore+'/100':'Recherche vérifiée')+'</span><div><strong>Correspondance vérifiée</strong><small>'+esc((a.scope==='title'?'Dans le titre':'Dans le titre ou le résumé')+' · '+(a.matchingTerms?.length||0)+' terme(s) trouvé(s)')+'</small></div></div><hr>'+
+    '<p class="muted-label">LE RÉSUMÉ</p><p class="abstract">'+esc(a.abstract||'Résumé indisponible.')+'</p>'+
+    '<div class="matched-chips">'+(a.matchingTerms||[]).slice(0,6).map(term=>'<span class="matched-chip">✓ '+esc(term)+'</span>').join('')+'</div>'+
     '<div class="paper-links">'+(a.doi?'<a href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer">↗ DOI</a>':'')+
     (a.url&&!a.doi?'<a href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer">↗ Article</a>':'')+
     (a.pdf?'<a href="'+esc(a.pdf)+'" target="_blank" rel="noopener noreferrer">↗ PDF disponible</a>':'')+'</div></article>';
@@ -132,14 +134,14 @@ function renderDiscover(){
   const a=s.articles[s.index];
   if(!a){finishSession();return;}
   const c=counts(s.actions);
-  root.innerHTML=pageIntro('UNE SÉLECTION À LA FOIS','À vous de swiper.','Lisez le résumé, faites votre choix et avancez à votre rythme.',
+  root.innerHTML=pageIntro('IT’S A MATCH... OR NOT','Faites matcher votre recherche.','Des publications ciblées, à aimer ou à passer. Décidez à partir des titres, des résumés et des critères vérifiés.',
     '<div class="button-row">'+btn('↶ Annuler','undo','secondary small',s.actions.length?'':'disabled')+btn('Terminer','finish','ghost small')+'</div>')+
     '<div class="discover-grid"><section class="session-column">'+
     '<div class="overview"><div class="stat"><span>ARTICLES GARDÉS</span><strong>'+c.liked+'</strong><span>Votre sélection</span></div><div class="stat"><span>À REVOIR</span><strong>'+c.later+'</strong><span>Pour plus tard</span></div><div class="stat"><span>EXAMINÉS</span><strong>'+s.index+'</strong><span>Dans cette session</span></div></div>'+
     '<div class="progress-wrap"><strong>Votre exploration</strong><span>'+Number(s.index+1)+' / '+s.articles.length+'</span></div><div class="progress"><div style="width:'+Math.round(s.index/s.articles.length*100)+'%"></div></div>'+
     '<div class="swipe-scene" id="swipe-scene"><div class="paper-stack">'+paperCard(a)+'</div>'+ 
     '<div class="giraffe-control-row">'+giraffeMascot()+'</div></div>'+
-    '<div class="swipe-actions"><button class="circle-btn reject" data-act="reject" aria-label="Pas intéressant" title="Pas intéressant (flèche gauche)">✕</button><button class="circle-btn hold" data-act="later" aria-label="À lire plus tard" title="À lire plus tard (flèche bas)">♧</button><button class="circle-btn like" data-act="like" aria-label="Intéressant" title="Intéressant (flèche droite)">♥</button></div>'+
+    '<div class="swipe-actions"><div class="swipe-control"><button class="circle-btn reject" data-act="reject" aria-label="Pas intéressant" title="Pas intéressant (flèche gauche)">✕</button><span>PASSER</span></div><div class="swipe-control"><button class="circle-btn hold" data-act="later" aria-label="À lire plus tard" title="À lire plus tard (flèche bas)">♧</button><span>PLUS TARD</span></div><div class="swipe-control"><button class="circle-btn like" data-act="like" aria-label="Intéressant" title="Intéressant (flèche droite)">♥</button><span>GARDER</span></div></div>'+
     '<p class="swipe-help"><kbd>←</kbd> Passer &nbsp; <kbd>↓</kbd> Plus tard &nbsp; <kbd>→</kbd> Garder &nbsp; <kbd>Backspace</kbd> Annuler</p></section>'+
     '<aside class="side-panel"><div class="panel"><p class="eyebrow">SESSION EN COURS</p><h2 class="section-title">Votre progression</h2><div class="line"><span>Intéressants</span><strong>'+c.liked+'</strong></div><div class="line"><span>À examiner</span><strong>'+c.later+'</strong></div><div class="line"><span>Écartés</span><strong>'+c.rejected+'</strong></div><div class="line"><span>Restants</span><strong>'+(s.articles.length-s.index)+'</strong></div></div><div class="soft-panel" style="margin-top:16px"><p class="eyebrow">PETIT RAPPEL</p><div class="card-quote">Lisez moins.<br>Découvrez mieux.</div><p class="tiny muted" style="line-height:1.7">Une session interrompue peut être reprise plus tard sur cet appareil.</p></div></aside></div>';
   attachSwipe();

@@ -1,1 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="120" fill="#173d38"/><path d="M344 144c-27-25-70-38-115-36-80 2-131 43-131 101 0 112 210 64 210 129 0 21-25 35-67 35-44 0-84-17-118-43l-34 58c44 34 100 52 160 52 87 0 150-41 150-111 0-117-211-76-211-126 0-17 20-31 58-31 34 0 67 10 98 30z" fill="#f6f7f4"/><circle cx="392" cy="393" r="33" fill="#b7dd92"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<title>Swipaper — la girafe scientifique</title>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#ff8b91"/><stop offset="1" stop-color="#ff5b75"/></linearGradient>
+<linearGradient id="fur" x2=".1" y2="1"><stop stop-color="#ffcb68"/><stop offset="1" stop-color="#ee9851"/></linearGradient></defs>
+<rect width="512" height="512" rx="122" fill="url(#bg)"/>
+<circle cx="255" cy="238" r="191" fill="#fff9f7" opacity=".96"/>
+<path d="M184 477c-12-59-7-149 1-226h103c-9 104-9 178 6 226z" fill="url(#fur)" stroke="#9e5935" stroke-width="7" stroke-linejoin="round"/>
+<g fill="#bf6e3d"><ellipse cx="213" cy="311" rx="22" ry="33" transform="rotate(-19 213 311)"/><ellipse cx="265" cy="368" rx="24" ry="37" transform="rotate(21 265 368)"/><ellipse cx="204" cy="427" rx="22" ry="32"/><ellipse cx="271" cy="266" rx="15" ry="20"/></g>
+<path d="M174 183l-31-42Q108 120 106 152q-2 35 65 58" fill="#ffc36a" stroke="#9e5935" stroke-width="7"/>
+<path d="M291 183l33-44q32-19 38 13 3 37-67 58" fill="#ffc36a" stroke="#9e5935" stroke-width="7"/>
+<path d="M172 184l-17-55m116 58 17-57" stroke="#955730" stroke-width="13" stroke-linecap="round"/>
+<circle cx="155" cy="125" r="15" fill="#96512e"/><circle cx="288" cy="126" r="15" fill="#96512e"/>
+<path d="M151 215q-1-81 72-88 84-6 108 74l-12 69q-18 72-94 75-70-5-84-78z" fill="url(#fur)" stroke="#9e5935" stroke-width="8" stroke-linejoin="round"/>
+<path d="M151 268q66-25 160-3 17 59-23 74-80 25-134-5-27-22-3-66" fill="#ffe1aa" stroke="#9e5935" stroke-width="6"/>
+<path d="M164 220q27-11 57-2m29 2q31-11 60 2" fill="none" stroke="#362e39" stroke-width="9" stroke-linecap="round"/>
+<circle cx="192" cy="232" r="37" fill="#ffffff" fill-opacity=".54" stroke="#24383b" stroke-width="11"/>
+<circle cx="283" cy="232" r="37" fill="#ffffff" fill-opacity=".54" stroke="#24383b" stroke-width="11"/>
+<path d="M229 227q8-9 17 0m-90-1-20-7m182 7 24-10" stroke="#24383b" stroke-width="10" fill="none" stroke-linecap="round"/>
+<circle cx="198" cy="233" r="10" fill="#26373b"/><circle cx="282" cy="234" r="10" fill="#26373b"/>
+<circle cx="183" cy="300" r="8" fill="#b77748"/><circle cx="280" cy="300" r="8" fill="#b77748"/>
+<path d="M213 314q23 22 47 0" stroke="#9e5935" stroke-width="7" fill="none" stroke-linecap="round"/>
+<path d="M314 356l97-29 39 116-101 28z" fill="#fff" stroke="#294b45" stroke-width="9" stroke-linejoin="round"/>
+<path d="M336 378l65-19m-56 40 60-18m-53 40 35-10" stroke="#83b6a5" stroke-width="8" stroke-linecap="round"/>
+<path d="M410 392c-18-25-44-9-36 9 5 13 23 22 40 31 13-21 27-40 22-51-7-17-28-8-26 11" fill="#fa6479"/>
+</svg>
