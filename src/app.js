@@ -1,4 +1,4 @@
-import { toArticle, toEuropePMCArticle, deduplicate, openAlexUrl, europePmcUrl, cutoffFromPeriod, fingerprints, zoteroFingerprints, isFresh, asRIS, asCSV, risFingerprints, zoteroItem } from './core.mjs';
+import { toArticle, toEuropePMCArticle, deduplicate, openAlexUrl, europePmcUrl, cutoffFromPeriod, fingerprints, zoteroFingerprints, isFresh, asRIS, asCSV, risFingerprints, zoteroItem, resetLocalLibraryState } from './core.mjs';
 
 const STORAGE='swipaper-v1-state';
 const TITLES={discover:'Découvrir',library:'Bibliothèque',topics:'Mes thématiques',history:'Historique',settings:'Paramètres'};
@@ -404,11 +404,7 @@ function resetLocalLibrary(){
     'Supprimer les articles enregistrés, toutes les décisions passées et l’historique local ?':
     'Effacer uniquement les articles enregistrés dans la bibliothèque locale ?';
   if(!confirm(message))return;
-  state.library={};
-  if(forget){
-    state.seen={};state.history=[];state.active=null;state.lastSummary=null;
-    state.alerts={lastCheck:null,known:[],unseen:[]};
-  }
+  state=resetLocalLibraryState(state,forget);
   libraryFilter='liked';
   el('modal-layer')?.remove();
   saveAndRender();

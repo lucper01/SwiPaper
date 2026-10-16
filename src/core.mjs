@@ -1,3 +1,14 @@
+export function resetLocalLibraryState(current, forgetProcessed=false) {
+  const updated={...current, library:{}};
+  if(forgetProcessed) {
+    updated.seen={};
+    updated.history=[];
+    updated.active=null;
+    updated.lastSummary=null;
+    updated.alerts={lastCheck:null,known:[],unseen:[]};
+  }
+  return updated;
+}
 export function abstractFromIndex(index) {
   if (!index || typeof index !== 'object') return '';
   const words=[];

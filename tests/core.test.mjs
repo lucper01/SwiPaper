@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {abstractFromIndex,cleanDoi,safeUrl,toArticle,toEuropePMCArticle,deduplicate,asRIS,asCSV,zoteroItem,openAlexUrl,europePmcUrl,cutoffFromPeriod,fingerprints,zoteroFingerprints,isFresh,normalizeTitle,risFingerprints} from '../src/core.mjs';
+import {abstractFromIndex,cleanDoi,safeUrl,toArticle,toEuropePMCArticle,deduplicate,asRIS,asCSV,zoteroItem,openAlexUrl,europePmcUrl,cutoffFromPeriod,fingerprints,zoteroFingerprints,isFresh,normalizeTitle,risFingerprints,resetLocalLibraryState} from '../src/core.mjs';
 test('reconstruct abstract',()=>{assert.equal(abstractFromIndex({world:[1],hello:[0]}),'hello world');assert.equal(abstractFromIndex(null),'');});
 test('identifiers and URL sanitizing',()=>{assert.equal(cleanDoi('https://doi.org/10.1234/ABC'),'10.1234/ABC');assert.equal(safeUrl('javascript:alert(1)'),'');});
 test('publication period using calendar days, months and years',()=>{
@@ -54,4 +54,34 @@ test('Indexing date alone is not mistaken for an initial publication date',()=>{
   },'Olfaction');
   assert.equal(record.date,'');
   assert.equal(isFresh(record,{cutoff:'2026-10-01'}),false);
+});
+
+test('Resetting the local library leaves Zotero, topics and decisions untouched by default',()=>{
+  const input={
+    topics:[{id:'olf',name:'Olfaction',query:'olfaction'}],
+    library:{paper:{article:{title:'A paper'},status:'liked'}},
+    seen:{'doi:10.1234/abc':'2026-10-16'},
+    history:[{id:'s1'}],active:{id:'s2'},
+    alerts:{lastCheck:'2026-10-16',known:['doi:10.1234/abc'],unseen:[]},
+    zoteroIndex:{user:'123',keys:['doi:10.1234/abc']},
+    externalIndex:{keys:['pmid:123456']},prefs:{zoteroUser:'123'}
+  };
+  const cleared=resetLocalLibraryState(input);
+  assert.deepEqual(cleared.library,{});
+  assert.deepEqual(cleared.seen,input.seen);
+  assert.deepEqual(cleared.history,input.history);
+  assert.deepEqual(cleared.topics,input.topics);
+  assert.deepEqual(cleared.zoteroIndex,input.zoteroIndex);
+  assert.deepEqual(input.library.paper.status,'liked');
+  const all=resetLocalLibraryState(input,true);
+  assert.deepEqual(all.library,{});
+  assert.deepEqual(all.seen,{});
+  assert.deepEqual(all.history,[]);
+  assert.equal(all.active,null);
+  assert.equal(all.lastSummary,null);
+  assert.deepEqual(all.alerts,{lastCheck:null,known:[],unseen:[]});
+  assert.deepEqual(all.topics,input.topics);
+  assert.deepEqual(all.prefs,input.prefs);
+  assert.deepEqual(all.externalIndex,input.externalIndex);
+  assert.deepEqual(all.zoteroIndex,input.zoteroIndex);
 });
