@@ -13,7 +13,7 @@ test('publication period using calendar days, months and years',()=>{
 });
 test('OpenAlex and PubMed / Europe PMC URLs are publication-date filtered',()=>{
   const a=new URL(openAlexUrl('vision',{cutoff:'2026-09-16',page:2}));
-  assert.equal(a.searchParams.get('search'),'vision');assert.match(a.searchParams.get('filter'),/2026-09-16/);
+  assert.equal(a.searchParams.get('search.title_and_abstract'),'vision');assert.match(a.searchParams.get('filter'),/2026-09-16/);
   const b=new URL(europePmcUrl('olfactory perception',{cutoff:'2026-09-16',page:3}));
   assert.match(b.searchParams.get('query'),/FIRST_PDATE:\[2026-09-16 TO/);
   assert.equal(b.searchParams.get('resultType'),'core');assert.equal(b.searchParams.get('page'),'3');

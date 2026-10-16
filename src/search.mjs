@@ -78,19 +78,19 @@ function containsPhrase(haystack,value){
   if(!needle)return false;
   return (' '+haystack+' ').includes(' '+needle+' ');
 }
-function truth(node,text){
-  if(node.op==='term')return containsPhrase(text,node.value);
-  if(node.op==='not')return !truth(node.child,text);
-  return node.op==='and'?(truth(node.left,text)&&truth(node.right,text)):(truth(node.left,text)||truth(node.right,text));
+function truth(node,fields){
+  if(node.op==='term')return fields.some(text=>containsPhrase(text,node.value));
+  if(node.op==='not')return !truth(node.child,fields);
+  return node.op==='and'?(truth(node.left,fields)&&truth(node.right,fields)):(truth(node.left,fields)||truth(node.right,fields));
 }
 // Scoring is descriptive keyword coverage, not a claimed machine-learning probability.
 export function evaluateScientificArticle(article,parsed,scope='title_abstract'){
   const ast=typeof parsed==='string'?parseScientificQuery(parsed):parsed;
   const title=normalizeSearchText(article.title);
   const abstract=normalizeSearchText(article.abstract);
-  const field=scope==='title'?title:[title,abstract].filter(Boolean).join(' ');
-  if(!field||!truth(ast.tree,field))return {matches:false,score:0,matched:[],titleMatched:[]};
-  const matched=ast.positives.filter(term=>containsPhrase(field,term));
+  const fields=scope==='title'?[title]:[title,abstract].filter(Boolean);
+  if(!fields.length||!truth(ast.tree,fields))return {matches:false,score:0,matched:[],titleMatched:[]};
+  const matched=ast.positives.filter(term=>fields.some(field=>containsPhrase(field,term)));
   const titleMatched=matched.filter(term=>containsPhrase(title,term));
   const count=ast.positives.length||1;
   const titleCoverage=titleMatched.length/count;
