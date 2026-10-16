@@ -8,7 +8,7 @@ const DEFAULT={
   library:{},seen:{},history:[],active:null,lastSummary:null,alerts:{lastCheck:null,known:[],unseen:[]},
   zoteroIndex:{user:'',syncedAt:null,keys:[],count:0},
   externalIndex:{importedAt:null,keys:[],count:0},
-  prefs:{periodCount:30,periodUnit:'days',sources:['openalex','pubmed'],batch:20,zoteroUser:'',zoteroCollection:''}
+  prefs:{periodCount:30,periodUnit:'months',sources:['openalex','pubmed'],batch:20,zoteroUser:'',zoteroCollection:'',quickQuery:'',searchScope:'title_abstract',types:['article','review','preprint']}
 };
 let state=loadState();
 if(!state.alerts||!Array.isArray(state.alerts.known))state.alerts={lastCheck:null,known:[],unseen:[]};
@@ -21,6 +21,7 @@ let loading=false;
 let toastTimer;
 let installing=null;
 let swipeAnimationLocked=false;
+let mobileFiltersOpen=false;
 const root=document.querySelector('#view');
 const toastBox=document.querySelector('#toast');
 const el=(id)=>document.getElementById(id);
@@ -93,28 +94,61 @@ function navigate(next){
   if(!TITLES[next])return;
   view=next;location.hash=next;render();window.scrollTo({top:0,behavior:'instant'});
 }
+function updateQuickQueryFeedback(){
+  const textarea=el('quick-query'),feedback=el('quick-feedback');
+  if(!textarea||!feedback)return;
+  const value=textarea.value.trim();
+  if(!value){feedback.className='search-feedback';feedback.textContent='Ajoutez vos mots-clés ou sélectionnez une thématique. Les critères sont vérifiés dans chaque article.';return;}
+  try{
+    const parsed=parseScientificQuery(value);
+    feedback.className='search-feedback valid';
+    feedback.textContent='✓ Requête valide · '+parsed.positives.length+' critère(s) · '+parsed.excluded.length+' exclusion(s) · contrôle strict des résultats';
+  }catch(error){feedback.className='search-feedback invalid';feedback.textContent='✕ '+error.message;}
+}
+
+function researchForm(){
+  const prefs=state.prefs;
+  const sourceList=Array.isArray(prefs.sources)?prefs.sources:['openalex','pubmed'];
+  const typeList=Array.isArray(prefs.types)?prefs.types:['article','review','preprint'];
+  const query=String(prefs.quickQuery||'');
+  const topics=state.topics.map(t=>'<label class="check-chip"><input type="checkbox" name="topic" value="'+esc(t.id)+'"><span>'+esc(t.name)+'</span></label>').join('');
+  return '<section class="research-panel"><div class="pane-title-row"><h2>Recherche d’articles</h2><span class="meta-hint">✧ Filtres scientifiques</span></div>'+
+  '<p class="muted tiny" style="line-height:1.65;margin:0 0 14px">Une recherche booléenne rigoureuse pour des articles qui correspondent réellement à vos critères.</p>'+
+  '<div class="research-form-body"><form id="session-form" class="form-stack">'+
+  '<div class="field"><label for="quick-query">MOTS-CLÉS ET REQUÊTE BOOLÉENNE</label>'+
+  '<div class="query-editor"><textarea id="quick-query" name="quickQuery" maxlength="400" rows="2" placeholder="(olfaction OR odor) AND (attention OR perception) NOT review" spellcheck="false">'+esc(query)+'</textarea><button class="query-submit" type="submit" aria-label="Lancer la recherche" '+(loading?'disabled':'')+'>⌕</button></div>'+
+  '<div class="query-tools">'+['AND','OR','NOT','(',')','"phrase"'].map(t=>'<button type="button" class="query-token" data-act="insert-token" data-token="'+esc(t)+'">'+esc(t)+'</button>').join('')+'</div>'+
+  '<div id="quick-feedback" class="search-feedback" role="status" aria-live="polite">Les critères doivent être reliés par AND / OR / NOT.</div>'+
+  '<small>Sans opérateur : tous les mots doivent être présents. Une expression entre guillemets est recherchée telle quelle.</small></div>'+
+  '<div class="field"><label>THÉMATIQUES ENREGISTRÉES (FACULTATIF)</label>'+
+  '<div class="check-list">'+(topics||'<span class="tiny muted">Aucune thématique préchargée.</span>')+'</div>'+
+  '<small>Si vous cochez un thème et saisissez une requête, les deux conditions seront réunies par AND. <button type="button" data-act="go-topics" class="text-btn">Gérer mes thématiques ↗</button></small></div>'+
+  '<div class="filter-heading">◫ Filtres de recherche</div><div class="filter-grid">'+
+  '<div class="form-section"><h3>◷ Période de publication</h3><div class="field"><label for="period-count">Publié depuis moins de</label><div class="form-row" style="grid-template-columns:1fr 1.3fr;gap:7px"><input id="period-count" name="periodCount" type="number" min="1" max="3650" value="'+esc(prefs.periodCount||30)+'" required>'+
+  '<select name="periodUnit" aria-label="Unité de période">'+[['days','jours'],['months','mois'],['years','années']].map(([v,t])=>'<option value="'+v+'" '+(prefs.periodUnit===v?'selected':'')+'>'+t+'</option>').join('')+'</select></div></div></div>'+
+  '<div class="form-section"><h3>◎ Zone de recherche</h3><label class="article-type-check"><input type="radio" name="searchScope" value="title" '+(prefs.searchScope==='title'?'checked':'')+'> Titre uniquement</label><label class="article-type-check"><input type="radio" name="searchScope" value="title_abstract" '+(prefs.searchScope!=='title'?'checked':'')+'> Titre + résumé</label></div>'+
+  '<div class="form-section"><h3>▤ Sources scientifiques</h3><div class="source-options"><label class="source-switch"><input type="checkbox" name="source" value="pubmed" '+(sourceList.includes('pubmed')?'checked':'')+'> PubMed / Europe PMC</label><label class="source-switch"><input type="checkbox" name="source" value="openalex" '+(sourceList.includes('openalex')?'checked':'')+'> OpenAlex</label></div>'+
+  '<small style="display:block;margin-top:11px">Google Scholar : <a href="https://scholar.google.com/" target="_blank" rel="noopener noreferrer">recherche externe ↗</a> (pas de collecte automatique).</small></div>'+
+  '<div class="form-section"><h3>▧ Types de publication</h3><label class="article-type-check"><input type="checkbox" name="kind" value="article" '+(typeList.includes('article')?'checked':'')+'> Articles scientifiques</label><label class="article-type-check"><input type="checkbox" name="kind" value="review" '+(typeList.includes('review')?'checked':'')+'> Revues et méta-analyses</label><label class="article-type-check"><input type="checkbox" name="kind" value="preprint" '+(typeList.includes('preprint')?'checked':'')+'> Prépublications</label></div></div>'+
+  '<div class="field"><label for="batch-size">TAILLE DE LA SESSION</label><select id="batch-size" name="batch">'+[10,20,30,50].map(n=>'<option value="'+n+'" '+(prefs.batch===n?'selected':'')+'>'+n+' publications</option>').join('')+'</select></div>'+
+  '<button class="btn search-cta" type="submit" '+(loading?'disabled':'')+'>'+(loading?'<span class="loading"></span> Recherche et dédoublonnage en cours…':'⌕  Lancer la recherche')+'</button>'+
+  '<div class="search-meta-row"><span>Sans doublons · Articles récents</span><button type="button" data-act="clear-quick-search" class="text-btn">Réinitialiser les filtres</button></div>'+
+  '<div class="pill-note" style="margin-top:8px">'+(prefs.zoteroUser?'Zotero lié : références déjà connues exclues après synchronisation.':'Zotero non lié · <button type="button" class="text-btn" data-act="go-settings">Connecter ma bibliothèque ↗</button>')+'</div>'+
+  '</form></div></section>';
+}
+function discoveryHero(){
+  return '<div class="discover-hero"><p class="eyebrow">SWIPEZ · EXPLOREZ · DÉCOUVREZ</p><h1>Des découvertes scientifiques qui vous correspondent vraiment.</h1><p>Une recherche rigoureuse, puis le plaisir de choisir. Love at first abstract ♡</p></div>';
+}
 function setup(){
-  const tags=state.topics.map(t=>'<label class="check-chip"><input type="checkbox" name="topic" value="'+esc(t.id)+'" checked><span>'+esc(t.name)+'</span></label>').join('');
-  const unread=state.alerts.unseen||[];
-  const alertLinks=unread.slice(0,5).map(a=>'<div class="line" style="display:flex;justify-content:space-between;gap:12px;padding:7px 0"><span style="font-size:12px">'+esc(a.title)+'</span>'+(a.url?'<a href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer" class="text-btn">Voir ↗</a>':'')+'</div>').join('');
-  const alertBody='<div class="button-row" style="justify-content:space-between"><div><strong style="font-size:13px">◌ Alertes de veille · '+unread.length+' nouveauté(s)</strong><p class="tiny muted" style="margin:7px 0 0">'+(state.alerts.lastCheck?'Dernière vérification : '+esc(new Date(state.alerts.lastCheck).toLocaleString('fr-FR')):'Première vérification à effectuer')+'</p></div>'+btn(alertLoading?'Vérification…':'↻ Vérifier les nouveautés','check-alerts','secondary small',alertLoading?'disabled':'')+'</div>';
-  const notice=state.topics.length?'<div class="soft-panel" style="margin-bottom:24px">'+alertBody+(unread.length?'<div class="divider"></div>'+alertLinks+'<button class="text-btn" data-act="clear-alerts">Marquer comme consultées</button>':'')+'</div>':'';
-  const period=state.prefs;
-  const src=Array.isArray(period.sources)?period.sources:['openalex','pubmed'];
-  const sourceBox=[['openalex','OpenAlex — multidisciplinaire'],['pubmed','PubMed / Europe PMC — biomédical']].map(([key,label])=>
-    '<label class="check-chip"><input type="checkbox" name="source" value="'+key+'" '+(src.includes(key)?'checked':'')+'><span>'+label+'</span></label>'
-  ).join('');
-  return pageIntro('VOTRE PROCHAINE DÉCOUVERTE','Les nouveaux papiers, sans les doublons.','Définissez vos thématiques, choisissez une période de publication et découvrez uniquement les articles qui restent à examiner.')+notice+
-    '<div class="session-setup"><div class="panel setup-card"><p class="eyebrow">NOUVELLE SESSION</p><h2>Que souhaitez-vous explorer ?</h2><p>Swipaper privilégie les plus récentes publications, puis écarte celles déjà parcourues ou présentes dans votre Zotero synchronisé.</p><form id="session-form" class="form-stack">'+
-    '<div class="field"><label>THÉMATIQUES</label><div class="check-list">'+tags+'</div>'+(!state.topics.length?'<div class="pill-note">Aucune thématique définie. <button class="text-btn" type="button" data-act="go-topics">Créer ma première thématique →</button></div>':'')+'</div>'+
-    '<div class="field"><label>BASES DE PUBLICATIONS</label><div class="check-list">'+sourceBox+'</div><small>La couverture PubMed passe par Europe PMC. Google Scholar n’autorise pas de collecte automatisée officielle.</small></div>'+
-    '<div class="form-row"><div class="field"><label for="batch-size">ARTICLES PAR SESSION</label><select id="batch-size" name="batch">'+[10,20,30,50].map(n=>'<option value="'+n+'" '+(period.batch===n?'selected':'')+'>'+n+' articles</option>').join('')+'</select></div><div class="field"><label for="period-count">PUBLIÉS DEPUIS MOINS DE</label><div class="form-row" style="gap:8px;grid-template-columns:1fr 1.5fr"><input name="periodCount" id="period-count" type="number" min="1" max="3650" step="1" required value="'+esc(period.periodCount||30)+'"><select name="periodUnit" id="period-unit">'+[['days','jours'],['months','mois'],['years','années']].map(([k,v])=>'<option value="'+k+'" '+(period.periodUnit===k?'selected':'')+'>'+v+'</option>').join('')+'</select></div></div></div>'+
-    '<div class="pill-note">'+(period.zoteroUser?
-       'Zotero lié · '+(state.zoteroIndex.user===period.zoteroUser&&state.zoteroIndex.syncedAt?state.zoteroIndex.count+' références vérifiées lors de la dernière synchronisation. Une nouvelle synchronisation sera effectuée avant le scan.':'Première synchronisation nécessaire avant le scan.')+
-       ' <button class="text-btn" type="button" data-act="go-settings">Gérer Zotero →</button>':
-       'Zotero non lié : les publications déjà examinées dans Swipaper seront exclues. <button class="text-btn" type="button" data-act="go-settings">Lier Zotero →</button>')+'</div>'+
-    '<button class="btn" type="submit" '+(loading||!state.topics.length?'disabled':'')+'>'+(loading?'<span class="loading"></span> Recherche et dédoublonnage…':'Découvrir les publications les plus récentes →')+'</button>'+
-    '</form></div><div class="soft-panel"><p class="eyebrow">LE PRINCIPE</p><div class="card-quote">New papers.<br>Fresh discoveries.</div><div class="divider"></div><p class="muted tiny" style="line-height:1.8">← Pas intéressant<br>→ À conserver<br>↓ À lire plus tard</p><div class="divider"></div><p class="tiny muted">Le filtrage utilise la date de publication, pas simplement la date d’indexation. Les articles déjà traités ne sont pas proposés à nouveau.</p></div></div>';
+  const news=(state.alerts?.unseen||[]).length;
+  return discoveryHero()+
+  '<div class="discover-workspace">'+researchForm()+
+  '<section class="result-panel"><div class="pane-title-row"><h2>Votre prochaine découverte</h2><span class="meta-hint">✧ À vous de swiper</span></div>'+
+  '<div class="preview-placeholder"><img src="./assets/icon.svg" alt="Girafe Swipaper avec un article scientifique">'+
+  '<h3>Rencontrez votre prochain article coup de cœur</h3><p>Indiquez vos mots-clés, choisissez votre période et lancez la recherche. Les premiers papiers pertinents apparaîtront ici.</p>'+
+  '<button class="btn secondary small" data-act="go-topics" type="button">⌕ Mes thématiques</button></div>'+
+  (news?'<div class="pill-note" style="margin-top:12px">✧ '+news+' nouvelle(s) publication(s) détectée(s) dans vos thématiques. <button type="button" data-act="check-alerts" class="text-btn">Actualiser ↻</button></div>':'')+
+  '</section></div>';
 }
 function paperCard(a){
   const authors=a.authors.slice(0,4).join(', ')+(a.authors.length>4?' et al.':'');
@@ -129,21 +163,31 @@ function paperCard(a){
     (a.pdf?'<a href="'+esc(a.pdf)+'" target="_blank" rel="noopener noreferrer">↗ PDF disponible</a>':'')+'</div></article>';
 }
 function renderDiscover(){
-  if(!state.active){root.innerHTML=state.lastSummary?endScreen(state.lastSummary):setup();return;}
-  const s=state.active;
-  const a=s.articles[s.index];
-  if(!a){finishSession();return;}
-  const c=counts(s.actions);
-  root.innerHTML=pageIntro('IT’S A MATCH... OR NOT','Faites matcher votre recherche.','Des publications ciblées, à aimer ou à passer. Décidez à partir des titres, des résumés et des critères vérifiés.',
-    '<div class="button-row">'+btn('↶ Annuler','undo','secondary small',s.actions.length?'':'disabled')+btn('Terminer','finish','ghost small')+'</div>')+
-    '<div class="discover-grid"><section class="session-column">'+
-    '<div class="overview"><div class="stat"><span>ARTICLES GARDÉS</span><strong>'+c.liked+'</strong><span>Votre sélection</span></div><div class="stat"><span>À REVOIR</span><strong>'+c.later+'</strong><span>Pour plus tard</span></div><div class="stat"><span>EXAMINÉS</span><strong>'+s.index+'</strong><span>Dans cette session</span></div></div>'+
-    '<div class="progress-wrap"><strong>Votre exploration</strong><span>'+Number(s.index+1)+' / '+s.articles.length+'</span></div><div class="progress"><div style="width:'+Math.round(s.index/s.articles.length*100)+'%"></div></div>'+
-    '<div class="swipe-scene" id="swipe-scene"><div class="paper-stack">'+paperCard(a)+'</div>'+ 
+  if(!state.active){root.innerHTML=state.lastSummary?endScreen(state.lastSummary):setup();updateQuickQueryFeedback();return;}
+  const sess=state.active;
+  const article=sess.articles[sess.index];
+  if(!article){finishSession();return;}
+  const c=counts(sess.actions);
+  const percent=Math.round(sess.index/sess.articles.length*100);
+  root.innerHTML=discoveryHero()+
+    '<div class="discover-workspace has-active '+(mobileFiltersOpen?'filters-open':'')+'">'+
+    researchForm()+
+    '<section class="result-panel"><div class="pane-title-row"><h2>Votre match scientifique</h2><span class="meta-hint">'+(sess.index+1)+' / '+sess.articles.length+'</span></div>'+
+    '<div class="button-row" style="justify-content:space-between;margin:7px 0 12px">'+
+    btn('◫ Affiner la recherche','toggle-search-pane','secondary small')+
+    '<div class="button-row">'+btn('↶ Annuler','undo','secondary small',sess.actions.length?'':'disabled')+btn('Terminer','finish','ghost small')+'</div></div>'+
+    '<div class="progress-wrap"><strong>Article '+(sess.index+1)+' sur '+sess.articles.length+'</strong><span>'+percent+' % parcourus</span></div>'+
+    '<div class="progress"><div style="width:'+percent+'%"></div></div>'+
+    '<div class="swipe-scene" id="swipe-scene"><div class="paper-stack">'+paperCard(article)+'</div>'+
     '<div class="giraffe-control-row">'+giraffeMascot()+'</div></div>'+
-    '<div class="swipe-actions"><div class="swipe-control"><button class="circle-btn reject" data-act="reject" aria-label="Pas intéressant" title="Pas intéressant (flèche gauche)">✕</button><span>PASSER</span></div><div class="swipe-control"><button class="circle-btn hold" data-act="later" aria-label="À lire plus tard" title="À lire plus tard (flèche bas)">♧</button><span>PLUS TARD</span></div><div class="swipe-control"><button class="circle-btn like" data-act="like" aria-label="Intéressant" title="Intéressant (flèche droite)">♥</button><span>GARDER</span></div></div>'+
-    '<p class="swipe-help"><kbd>←</kbd> Passer &nbsp; <kbd>↓</kbd> Plus tard &nbsp; <kbd>→</kbd> Garder &nbsp; <kbd>Backspace</kbd> Annuler</p></section>'+
-    '<aside class="side-panel"><div class="panel"><p class="eyebrow">SESSION EN COURS</p><h2 class="section-title">Votre progression</h2><div class="line"><span>Intéressants</span><strong>'+c.liked+'</strong></div><div class="line"><span>À examiner</span><strong>'+c.later+'</strong></div><div class="line"><span>Écartés</span><strong>'+c.rejected+'</strong></div><div class="line"><span>Restants</span><strong>'+(s.articles.length-s.index)+'</strong></div></div><div class="soft-panel" style="margin-top:16px"><p class="eyebrow">PETIT RAPPEL</p><div class="card-quote">Lisez moins.<br>Découvrez mieux.</div><p class="tiny muted" style="line-height:1.7">Une session interrompue peut être reprise plus tard sur cet appareil.</p></div></aside></div>';
+    '<div class="swipe-actions">'+
+    '<div class="swipe-control"><button class="circle-btn reject" data-act="reject" aria-label="Pas intéressant" title="Passer (flèche gauche)">✕</button><span>PASSER</span></div>'+
+    '<div class="swipe-control"><button class="circle-btn hold" data-act="later" aria-label="À lire plus tard" title="Plus tard (flèche bas)">♧</button><span>PLUS TARD</span></div>'+
+    '<div class="swipe-control"><button class="circle-btn like" data-act="like" aria-label="Conserver" title="Garder (flèche droite)">♥</button><span>GARDER</span></div>'+
+    '</div><p class="swipe-help">← Passer · ↓ Plus tard · → Garder · Retour arrière : annuler</p>'+
+    '<div class="search-session-meta"><div><strong>'+c.liked+'</strong><small>Articles conservés</small></div><div><strong>'+c.later+'</strong><small>À relire plus tard</small></div></div>'+
+    '</section></div>';
+  updateQuickQueryFeedback();
   attachSwipe();
 }
 function animatedDecision(decision){
@@ -246,7 +290,7 @@ function localFingerprints() {
   for(const key of Object.keys(state.seen||{}))if(!key.startsWith('id:'))fp.add(key);
   return [...fp];
 }
-async function fetchSource(topic,source,cutoff,page,key) {
+async function fetchSource(topic,source,cutoff,page,key,kinds=['article','review','preprint']) {
   const isPubmed=source==='pubmed';
   const parsed=parseScientificQuery(topic.query);
   const scope=themeScope(topic);
@@ -256,9 +300,18 @@ async function fetchSource(topic,source,cutoff,page,key) {
   const response=await fetch(url,{headers:{Accept:'application/json'}});
   if(!response.ok)throw new Error((isPubmed?'Europe PMC':'OpenAlex')+' HTTP '+response.status);
   const data=await response.json();
-  const records=isPubmed?(data.resultList?.result||[]).map(w=>toEuropePMCArticle(w,topic.name))
-    :(data.results||[]).map(w=>toArticle(w,topic.name));
-  return records.filter(a=>a.abstract.length>35&&a.date&&a.url).flatMap(a=>{
+  const records=isPubmed?(data.resultList?.result||[]).map(w=>{
+      const a=toEuropePMCArticle(w,topic.name);
+      const publicationTypes=(w.pubTypeList?.pubType||[]).join(' ').toLowerCase();
+      const kind=w.source==='PPR'?'preprint':/review|meta.analysis|systematic/.test(publicationTypes)?'review':'article';
+      return {...a,kind};
+    }):(data.results||[]).map(w=>{
+      const a=toArticle(w,topic.name);
+      const classification=String(w.type||w.type_crossref||'').toLowerCase();
+      const kind=/preprint|posted.content/.test(classification)?'preprint':/review|meta.analysis/.test(classification)?'review':'article';
+      return {...a,kind};
+    });
+  return records.filter(a=>a.abstract.length>35&&a.date&&a.url&&kinds.includes(a.kind)).flatMap(a=>{
     const assessment=evaluateScientificArticle(a,parsed,scope);
     return assessment.matches?[{...a,relevanceScore:assessment.score,matchingTerms:assessment.matched,titleTerms:assessment.titleMatched,scope}]:[];
   });
@@ -268,16 +321,29 @@ async function startSession(form){
   const fd=new FormData(form);
   const ids=fd.getAll('topic');
   const sources=fd.getAll('source').filter(v=>['openalex','pubmed'].includes(v));
-  const selected=ids.map(topicById).filter(Boolean);
-  if(!selected.length){showToast('Sélectionnez au moins une thématique.');return;}
-  if(!sources.length){showToast('Sélectionnez au moins une source bibliographique.');return;}
+  const kinds=fd.getAll('kind').filter(v=>['article','review','preprint'].includes(v));
+  const quickQuery=String(fd.get('quickQuery')||'').trim();
+  const scope=String(fd.get('searchScope')||'title_abstract');
+  let selected=ids.map(topicById).filter(Boolean);
+  if(!['title','title_abstract'].includes(scope)){showToast('Zone de recherche invalide.');return;}
+  if(quickQuery){
+    try{parseScientificQuery(quickQuery);}catch(error){showToast('Erreur de logique : '+error.message);return;}
+    selected=selected.length?selected.map(t=>({...t,query:'('+t.query+') AND ('+quickQuery+')',scope})):
+      [{id:'quick',name:'Recherche personnalisée',query:quickQuery,scope}];
+  }
+  if(!selected.length){showToast('Saisissez une requête ou sélectionnez au moins une thématique enregistrée.');return;}
+  if(!sources.length){showToast('Sélectionnez au moins une base bibliographique.');return;}
+  if(!kinds.length){showToast('Sélectionnez au moins un type d’article.');return;}
+  for(const t of selected){try{parseScientificQuery(t.query);}catch(error){showToast(t.name+' : '+error.message);return;}}
+  if(state.active&&!confirm('Remplacer la session en cours ? Les articles déjà traités resteront sauvegardés.'))return;
   const batch=Math.min(50,Math.max(10,Number(fd.get('batch'))||20));
   const periodCount=Number(fd.get('periodCount'));
   const periodUnit=String(fd.get('periodUnit')||'days');
   let cutoff;
   try{cutoff=cutoffFromPeriod(periodCount,periodUnit);}catch(error){showToast(error.message);return;}
   state.prefs.batch=batch;state.prefs.periodCount=periodCount;
-  state.prefs.periodUnit=periodUnit;state.prefs.sources=sources;persist();
+  state.prefs.periodUnit=periodUnit;state.prefs.sources=sources;state.prefs.types=kinds;
+  state.prefs.quickQuery=quickQuery;state.prefs.searchScope=scope;persist();
   loading=true;render();
   const errors=[];
   try{
@@ -290,7 +356,7 @@ async function startSession(form){
     for(let page=1;page<=5;page++){
       const active=pools.filter(p=>!p.exhausted);
       if(!active.length)break;
-      const results=await Promise.allSettled(active.map(async p=>fetchSource(p.topic,p.source,cutoff,page,key)));
+      const results=await Promise.allSettled(active.map(async p=>fetchSource(p.topic,p.source,cutoff,page,key,kinds)));
       results.forEach((result,i)=>{
         if(result.status==='rejected'){
           errors.push(active[i].topic.name+' / '+active[i].source+' : '+(result.reason?.message||'Erreur réseau'));
@@ -310,7 +376,7 @@ async function startSession(form){
     const merged=deduplicate(pools.flatMap(p=>p.articles).sort((a,b)=>b.date.localeCompare(a.date)||b.relevanceScore-a.relevanceScore))
       .filter(a=>isFresh(a,{cutoff,seen,zotero})).slice(0,batch);
     if(!merged.length)throw new Error('Aucun article inédit avec résumé pour cette période : élargissez-la ou changez les mots-clés.');
-    state.active={id:uid(),started:new Date().toISOString(),articles:merged,index:0,actions:[],cutoff,sources};
+    state.active={id:uid(),started:new Date().toISOString(),articles:merged,index:0,actions:[],cutoff,sources,query:quickQuery};mobileFiltersOpen=false;
     state.lastSummary=null;persist();
     if(errors.length)showToast('Résultats partiels : '+errors[0]);
   }catch(error){showToast('Recherche impossible : '+error.message);}
@@ -355,7 +421,7 @@ async function checkNewPapers(manual=false) {
     const key=sessionStorage.getItem('swipaper-openalex')||'';
     const tasks=state.topics.flatMap(topic=>sources.map(source=>({topic,source})));
     if(!tasks.length)throw new Error('Sélectionnez une source bibliographique.');
-    const results=await Promise.allSettled(tasks.map(x=>fetchSource(x.topic,x.source,cutoff,1,key)));
+    const results=await Promise.allSettled(tasks.map(x=>fetchSource(x.topic,x.source,cutoff,1,key,state.prefs.types||['article','review','preprint'])));
     const valid=results.filter(r=>r.status==='fulfilled');
     if(!valid.length)throw new Error('Sources indisponibles ou accès bloqué.');
     const fromLibrary=localFingerprints();
@@ -572,11 +638,21 @@ document.addEventListener('click',event=>{
   if(act==='go-discover')navigate('discover');
   if(act==='go-topics')navigate('topics');
   if(act==='go-settings')navigate('settings');
+  if(act==='toggle-search-pane'){
+    mobileFiltersOpen=!mobileFiltersOpen;
+    const shell=document.querySelector('.discover-workspace');
+    shell?.classList.toggle('filters-open',mobileFiltersOpen);
+  }
+  if(act==='clear-quick-search'){
+    state.prefs.quickQuery='';state.prefs.periodCount=30;state.prefs.periodUnit='months';
+    state.prefs.searchScope='title_abstract';state.prefs.sources=['openalex','pubmed'];
+    state.prefs.types=['article','review','preprint'];persist();render();
+  }
   if(act==='example-query'){
     const q=el('topic-query');if(q){q.value='("olfactory perception" OR olfaction) AND ("temporal integration" OR timing) NOT review';updateQueryFeedback();q.focus();}
   }
   if(act==='insert-token'){
-    const q=el('topic-query');if(q){const val=button.dataset.token==='"phrase"'?'""':button.dataset.token;const left=q.value.slice(0,q.selectionStart),right=q.value.slice(q.selectionEnd);q.value=left+(left&&!/\s$/.test(left)?' ':'')+val+' '+right;q.focus();const at=q.value.indexOf(val,left.length)+(val==='""'?1:val.length);q.setSelectionRange(at,at);updateQueryFeedback();}
+    const q=el('topic-query')||el('quick-query');if(q){const val=button.dataset.token==='"phrase"'?'""':button.dataset.token;const left=q.value.slice(0,q.selectionStart),right=q.value.slice(q.selectionEnd);q.value=left+(left&&!/\s$/.test(left)?' ':'')+val+' '+right;q.focus();const at=q.value.indexOf(val,left.length)+(val==='""'?1:val.length);q.setSelectionRange(at,at);updateQueryFeedback();updateQuickQueryFeedback();}
   }
   if(act==='reset-library')openLibraryReset();
   if(act==='confirm-library-reset')resetLocalLibrary();
@@ -617,7 +693,7 @@ document.addEventListener('click',event=>{
   if(act==='check-alerts')checkNewPapers(true);
   if(act==='clear-alerts'){state.alerts.unseen=[];saveAndRender();}
 });
-document.addEventListener('input',event=>{if(event.target.id==='topic-query')updateQueryFeedback();});
+document.addEventListener('input',event=>{if(event.target.id==='topic-query')updateQueryFeedback();if(event.target.id==='quick-query')updateQuickQueryFeedback();});
 document.addEventListener('submit',event=>{
   event.preventDefault();
   const form=event.target;
