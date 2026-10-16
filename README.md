@@ -8,6 +8,8 @@
 - Consultation du titre, des auteurs, de la revue, de la date et du résumé de chaque publication.
 - Accès aux DOI, aux pages des articles et aux PDF en accès ouvert lorsqu'un lien est disponible.
 - Choix de la période de publication à explorer.
+- Vérification des nouvelles publications à l'ouverture de l'application ou sur demande.
+- Signalement et consultation des références nouvelles repérées par thématique.
 
 ## Sélection des articles
 
@@ -40,4 +42,4 @@
 - Sauvegarde locale des préférences, des sélections et de l'historique.
 - Consultation hors ligne des informations déjà enregistrées sur l'appareil.
 
-**Version 0.1 :** les alertes automatiques, l'envoi d'e-mails sans validation et la synchronisation entre plusieurs appareils ne sont pas encore disponibles.
+**Version 0.1 :** les alertes envoyées lorsque l'application est fermée, l'envoi d'e-mails sans validation et la synchronisation entre plusieurs appareils ne sont pas encore disponibles.
