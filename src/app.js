@@ -1,4 +1,4 @@
-import { toArticle, toEuropePMCArticle, deduplicate, openAlexUrl, europePmcUrl, cutoffFromPeriod, fingerprints, zoteroFingerprints, isFresh, asRIS, asCSV, zoteroItem } from './core.mjs';
+import { toArticle, toEuropePMCArticle, deduplicate, openAlexUrl, europePmcUrl, cutoffFromPeriod, fingerprints, zoteroFingerprints, isFresh, asRIS, asCSV, risFingerprints, zoteroItem } from './core.mjs';
 
 const STORAGE='swipaper-v1-state';
 const TITLES={discover:'Découvrir',library:'Bibliothèque',topics:'Mes thématiques',history:'Historique',settings:'Paramètres'};
@@ -6,6 +6,7 @@ const DEFAULT={
   topics:[],
   library:{},seen:{},history:[],active:null,lastSummary:null,alerts:{lastCheck:null,known:[],unseen:[]},
   zoteroIndex:{user:'',syncedAt:null,keys:[],count:0},
+  externalIndex:{importedAt:null,keys:[],count:0},
   prefs:{periodCount:30,periodUnit:'days',sources:['openalex','pubmed'],batch:20,zoteroUser:'',zoteroCollection:''}
 };
 let state=loadState();
@@ -28,7 +29,7 @@ function loadState(){
     const data=JSON.parse(localStorage.getItem(STORAGE)||'null');
     if(data && Array.isArray(data.topics) && data.library && typeof data.library==='object') {
       const migrated=data.topics.filter(t=>!['topic-neuro','topic-multi'].includes(t.id));
-      return {...structuredClone(DEFAULT),...data,topics:migrated,prefs:{...DEFAULT.prefs,...data.prefs},zoteroIndex:data.zoteroIndex||structuredClone(DEFAULT.zoteroIndex)};
+      return {...structuredClone(DEFAULT),...data,topics:migrated,prefs:{...DEFAULT.prefs,...data.prefs},zoteroIndex:data.zoteroIndex||structuredClone(DEFAULT.zoteroIndex),externalIndex:data.externalIndex||structuredClone(DEFAULT.externalIndex)};
     }
   }catch(e){console.warn('Local state unavailable',e);}
   return structuredClone(DEFAULT);
@@ -233,7 +234,7 @@ async function startSession(form){
   try{
     // Toujours synchroniser l'intégralité du Zotero lié avant d'annoncer qu'un article est nouveau.
     if(state.prefs.zoteroUser)await syncZoteroLibrary({silent:true});
-    const zotero=state.prefs.zoteroUser?state.zoteroIndex.keys:[];
+    const zotero=[...(state.prefs.zoteroUser?state.zoteroIndex.keys:[]),...(state.externalIndex?.keys||[])];
     const seen=localFingerprints();
     const key=sessionStorage.getItem('swipaper-openalex')||'';
     const pools=selected.flatMap(topic=>sources.map(source=>({topic,source,articles:[],exhausted:false})));
@@ -309,7 +310,7 @@ async function checkNewPapers(manual=false) {
     const valid=results.filter(r=>r.status==='fulfilled');
     if(!valid.length)throw new Error('Sources indisponibles ou accès bloqué.');
     const fromLibrary=localFingerprints();
-    const zotero=state.prefs.zoteroUser?state.zoteroIndex.keys:[];
+    const zotero=[...(state.prefs.zoteroUser?state.zoteroIndex.keys:[]),...(state.externalIndex?.keys||[])];
     const found=deduplicate(valid.flatMap(r=>r.value).sort((a,b)=>b.date.localeCompare(a.date)))
       .filter(a=>isFresh(a,{cutoff,seen:fromLibrary,zotero}));
     const known=new Set(state.alerts.known||[]);
@@ -367,14 +368,40 @@ function renderHistory(){
     }).join('')+'</div>':empty('Votre historique est vide','Les sessions terminées apparaîtront ici.','go-discover','Démarrer une session'));
 }
 function renderSettings(){
-  root.innerHTML=pageIntro('PRÉFÉRENCES','Un espace à votre image.','Personnalisez vos intégrations et les options de votre veille scientifique.')+
-    '<div class="session-setup"><div class="panel"><h2 class="section-title">Connexion Zotero</h2><p class="muted tiny" style="line-height:1.8">Pour ajouter les références à votre bibliothèque, utilisez votre identifiant numérique Zotero et une clé API autorisée à écrire. La clé n’est conservée que pendant la session de votre navigateur.</p>'+
-    '<form id="settings-form" class="form-stack"><div class="field"><label for="zotero-user">Identifiant numérique Zotero</label><input id="zotero-user" name="zoteroUser" inputmode="numeric" pattern="[0-9]*" placeholder="Identifiant de bibliothèque" value="'+esc(state.prefs.zoteroUser)+'"></div>'+
-    '<div class="field"><label for="zotero-key">Clé API Zotero (temporaire)</label><input id="zotero-key" name="zoteroKey" type="password" autocomplete="off" placeholder="À saisir pour autoriser l’envoi" value=""><small>La clé n’est ni enregistrée sur GitHub, ni conservée dans la sauvegarde locale.</small></div>'+
-    '<div class="field"><label for="zotero-collection">Clé de collection Zotero (facultative)</label><input id="zotero-collection" name="zoteroCollection" maxlength="8" placeholder="Ex. ABCD1234" value="'+esc(state.prefs.zoteroCollection)+'"></div>'+
-    '<div class="field"><label for="openalex-key">Clé API OpenAlex (facultative)</label><input id="openalex-key" name="openalexKey" type="password" autocomplete="off" placeholder="Pour relever les limites d’accès" value=""><small>Sans clé, les recherches gratuites restent possibles sous réserve des limites de l’API.</small></div>'+
-    '<button class="btn" type="submit">Enregistrer les préférences</button></form></div>'+
-    '<div class="soft-panel"><p class="eyebrow">CONFIDENTIALITÉ</p><h2 class="section-title">Vos données restent ici.</h2><p class="tiny muted" style="line-height:1.9">Les thématiques, les décisions et les sessions sont enregistrées localement sur cet appareil. Il n’existe pas encore de compte Swipaper ou de synchronisation entre appareils. Les clés temporaires restent uniquement dans le stockage de session du navigateur.</p><div class="divider"></div><div class="button-row">'+btn('Sauvegarder mes données','backup','secondary small')+btn('Importer une sauvegarde','restore','secondary small')+'</div><div class="divider"></div><p class="tiny muted">La restauration remplace les données locales de cet appareil.</p></div></div>';
+  const zi=state.zoteroIndex||{user:'',syncedAt:null,count:0,keys:[]};
+  const ei=state.externalIndex||{importedAt:null,keys:[],count:0};
+  const zoteroStatus=state.prefs.zoteroUser&&zi.user===state.prefs.zoteroUser&&zi.syncedAt
+    ?zi.count+' références indexées · actualisées le '+new Date(zi.syncedAt).toLocaleString('fr-FR')
+    :'Aucune synchronisation Zotero confirmée.';
+  root.innerHTML=pageIntro('PRÉFÉRENCES','Vos bibliothèques, sans doublons.','Liez votre collection de références pour éviter de proposer des articles déjà conservés.')+
+    '<div class="session-setup"><div class="panel"><h2 class="section-title">Bibliothèque Zotero</h2>'+
+    '<p class="muted tiny" style="line-height:1.8">Swipaper vérifie toutes les références bibliographiques de votre bibliothèque personnelle Zotero avant chaque session. Vous devez fournir un identifiant numérique et une clé API avec permission de lecture ; l’écriture n’est utile que pour exporter vers Zotero.</p>'+
+    '<div class="pill-note">'+esc(zoteroStatus)+'</div><div class="spacer"></div>'+
+    '<form id="settings-form" class="form-stack"><div class="field"><label for="zotero-user">Identifiant numérique Zotero</label><input id="zotero-user" name="zoteroUser" inputmode="numeric" pattern="[0-9]*" placeholder="Ex. 1234567" value="'+esc(state.prefs.zoteroUser)+'"></div>'+
+    '<div class="field"><label for="zotero-key">Clé API Zotero</label><input id="zotero-key" name="zoteroKey" type="password" autocomplete="off" placeholder="Clé API temporaire"><small>Clé conservée uniquement dans le stockage de session du navigateur, jamais dans le dépôt ni dans les sauvegardes.</small></div>'+
+    '<div class="field"><label for="zotero-collection">Collection Zotero de destination (facultative)</label><input id="zotero-collection" name="zoteroCollection" maxlength="8" placeholder="Ex. ABCD1234" value="'+esc(state.prefs.zoteroCollection)+'"><small>Ce choix concerne l’export uniquement : l’exclusion des doublons examine toute la bibliothèque.</small></div>'+
+    '<div class="field"><label for="openalex-key">Clé API OpenAlex (facultative)</label><input id="openalex-key" name="openalexKey" type="password" autocomplete="off" placeholder="Clé gratuite personnelle"><small>Augmente les quotas de recherche sur OpenAlex. Sans clé, un usage occasionnel demeure possible.</small></div>'+
+    '<div class="button-row"><button class="btn" type="submit">Enregistrer</button>'+btn(syncingZotero?'Synchronisation…':'↻ Vérifier ma bibliothèque Zotero','sync-zotero','secondary',syncingZotero?'disabled':'')+btn('Dissocier Zotero','unlink-zotero','ghost')+'</div></form></div>'+
+    '<div class="soft-panel"><p class="eyebrow">AUTRES BIBLIOTHÈQUES</p><h2 class="section-title">Importer des références RIS</h2>'+
+    '<p class="tiny muted" style="line-height:1.9">Vous pouvez également importer un fichier RIS exporté depuis Zotero, Mendeley, EndNote ou un autre logiciel bibliographique. '+(ei.importedAt?'Dernier import : '+esc(new Date(ei.importedAt).toLocaleString('fr-FR'))+' · '+ei.count+' références.':'Aucune bibliothèque externe importée.')+'</p>'+
+    '<div class="button-row">'+btn('↑ Importer un fichier RIS','import-ris','secondary small')+btn('Effacer cet import','clear-ris','ghost small')+'</div>'+
+    '<div class="divider"></div><p class="eyebrow">VOS DONNÉES</p><p class="tiny muted" style="line-height:1.9">Vos thèmes, sessions et index bibliographiques restent sur cet appareil. Les clés d’accès ne sont pas incluses dans la sauvegarde. La synchronisation entre différents appareils n’est pas encore disponible.</p>'+
+    '<div class="button-row">'+btn('Sauvegarder','backup','secondary small')+btn('Restaurer','restore','secondary small')+'</div></div></div>';
+}
+function importRIS(){
+  const input=document.createElement('input');
+  input.type='file';input.accept='.ris,application/x-research-info-systems,text/plain';
+  input.addEventListener('change',async()=>{
+    try{
+      if(!input.files?.[0])return;
+      if(input.files[0].size>12*1024*1024)throw new Error('Fichier RIS trop volumineux (maximum 12 Mo).');
+      const data=risFingerprints(await input.files[0].text());
+      if(!data.count)throw new Error('Aucune référence bibliographique valide dans ce fichier RIS.');
+      state.externalIndex={importedAt:new Date().toISOString(),count:data.count,keys:data.keys};
+      persist();render();showToast(data.count+' références importées : elles seront exclues des prochains scans.');
+    }catch(error){showToast('Import RIS impossible : '+error.message);}
+  });
+  input.click();
 }
 function selectedFromSession(s){return s.actions.filter(a=>a.decision==='liked').map(a=>a.article);}
 function selectedLibrary(){return Object.values(state.library).filter(x=>x.status==='liked').map(x=>x.article);}
@@ -456,6 +483,13 @@ document.addEventListener('click',event=>{
   if(act==='edit-topic'){topicEditorId=id;render();el('topic-name')?.focus();}
   if(act==='cancel-topic-edit'){topicEditorId='';render();}
   if(act==='sync-zotero')syncZoteroLibrary().catch(error=>showToast(error.message));
+  if(act==='import-ris')importRIS();
+  if(act==='clear-ris'&&confirm('Effacer l’index des références importées par RIS ?')){state.externalIndex={importedAt:null,keys:[],count:0};saveAndRender();}
+  if(act==='unlink-zotero'&&confirm('Dissocier Zotero et supprimer son index local ?')){
+    state.prefs.zoteroUser='';state.prefs.zoteroCollection='';
+    state.zoteroIndex={user:'',syncedAt:null,keys:[],count:0};
+    sessionStorage.removeItem('swipaper-zotero');saveAndRender();
+  }
   if(act==='delete-topic'){
     const t=topicById(id);
     if(t&&confirm('Supprimer la thématique « '+t.name+' » ?')){
@@ -501,7 +535,12 @@ document.addEventListener('submit',event=>{
     saveAndRender();showToast('Thématique enregistrée : '+name);
   }
   if(form.id==='settings-form'){
-    state.prefs.zoteroUser=form.elements.zoteroUser.value.trim();
+    const nextUser=form.elements.zoteroUser.value.trim();
+    if(nextUser!==state.prefs.zoteroUser){
+      state.zoteroIndex={user:'',syncedAt:null,keys:[],count:0};
+      sessionStorage.removeItem('swipaper-zotero');
+    }
+    state.prefs.zoteroUser=nextUser;
     state.prefs.zoteroCollection=form.elements.zoteroCollection.value.trim().toUpperCase();
     if(form.elements.zoteroKey.value.trim())sessionStorage.setItem('swipaper-zotero',form.elements.zoteroKey.value.trim());
     if(form.elements.openalexKey.value.trim())sessionStorage.setItem('swipaper-openalex',form.elements.openalexKey.value.trim());
