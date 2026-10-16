@@ -45,3 +45,13 @@ test('RIS library import excludes article DOI and title',()=>{
   assert.ok(result.keys.includes('doi:10.1234/abc'));
   assert.ok(result.keys.includes('title:crossmodal temporal binding in visual perception'));
 });
+
+test('Indexing date alone is not mistaken for an initial publication date',()=>{
+  const record=toEuropePMCArticle({
+    id:'12345789',pmid:'12345789',
+    title:'Neural processing of olfactory cues during attention',
+    firstIndexDate:'2026-10-16',pubYear:'2018',abstractText:'A real abstract.'
+  },'Olfaction');
+  assert.equal(record.date,'');
+  assert.equal(isFresh(record,{cutoff:'2026-10-01'}),false);
+});

@@ -81,7 +81,7 @@ function stripMarkup(html) {
 export function toEuropePMCArticle(work,topic='') {
   const doi=cleanDoi(work.doi);
   const pmid=extractPmid(work.pmid);
-  const firstDate=String(work.firstPublicationDate||work.firstIndexDate||work.electronicPublicationDate||'');
+  const firstDate=String(work.firstPublicationDate||work.electronicPublicationDate||'');
   const date=/^\d{4}-\d{2}-\d{2}$/.test(firstDate)?firstDate:'';
   const links=work.fullTextUrlList?.fullTextUrl||[];
   const pdfUrl=links.find(l=>l.documentStyle==='pdf'||/\.pdf(?:$|\?)/i.test(l.url||''))?.url||'';
