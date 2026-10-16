@@ -17,3 +17,29 @@
 @media(max-width:1100px){.sidebar{width:225px}.discover-grid,.session-setup{grid-template-columns:1fr}.side-panel{display:none}}
 @media(max-width:760px){.sidebar{display:none}.topbar{height:62px;padding:0 19px}.top-actions{font-size:10px}.install-button{padding:7px;font-size:10px}.mobile-nav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;bottom:0;left:0;right:0;z-index:50;background:#fff;border-top:1px solid var(--line);padding:9px 0 calc(7px + env(safe-area-inset-bottom))}.mobile-nav button{background:transparent;border:0;color:#9aa99b;font-size:24px;display:flex;flex-direction:column;gap:1px;align-items:center}.mobile-nav button.active{color:var(--green)}.mobile-nav button small{font-size:9px;font-weight:800}#view{padding:33px 17px 110px}.page-heading{align-items:start;flex-direction:column;gap:17px;margin-bottom:25px}.page-subtitle{font-size:12px}.paper-card{min-height:400px;padding:23px}.paper-card h2{font-size:20px}.overview{gap:7px}.stat{padding:12px}.stat strong{font-size:22px}.stat span{font-size:10px}.list-card{display:block}.list-card .button-row{margin-top:10px}.session-setup{gap:15px}.toast{bottom:91px;left:16px;right:16px}.form-row{grid-template-columns:1fr}.panel{padding:20px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+
+/* The long-necked mascot is a visual partner for every swipe. */
+.swipe-scene{position:relative;isolation:isolate}
+.giraffe-control-row{height:105px;display:flex;align-items:end;justify-content:center;pointer-events:none;margin:-8px auto -22px}
+.giraffe-illustration{height:138px;width:116px;overflow:visible;position:relative;z-index:1;pointer-events:none}
+.giraffe-svg{width:100%;height:100%;overflow:visible;display:block;filter:drop-shadow(0 4px 3px rgba(50,75,39,.12))}
+.giraffe-motion{transform-origin:90px 216px;transform-box:view-box;will-change:transform}
+.swipe-scene.swipe-to-left .giraffe-motion{animation:giraffe-left .46s ease-in-out both}
+.swipe-scene.swipe-to-right .giraffe-motion{animation:giraffe-right .46s ease-in-out both}
+.swipe-scene.swipe-to-later .giraffe-motion{animation:giraffe-nod .46s ease-in-out both}
+.swipe-scene.swipe-to-left .paper-card{animation:swipaper-card-left .46s ease-in forwards}
+.swipe-scene.swipe-to-right .paper-card{animation:swipaper-card-right .46s ease-in forwards}
+.swipe-scene.swipe-to-later .paper-card{animation:swipaper-card-later .46s ease-in forwards}
+@keyframes giraffe-left{0%{transform:rotate(0)}40%{transform:rotate(-34deg)}85%{transform:rotate(-27deg)}100%{transform:rotate(-28deg)}}
+@keyframes giraffe-right{0%{transform:rotate(0)}40%{transform:rotate(34deg)}85%{transform:rotate(27deg)}100%{transform:rotate(28deg)}}
+@keyframes giraffe-nod{0%,100%{transform:rotate(0)}50%{transform:translateY(10px) rotate(5deg)}}
+@keyframes swipaper-card-left{0%{transform:translateX(0);opacity:1}100%{transform:translateX(-70%) rotate(-10deg);opacity:0}}
+@keyframes swipaper-card-right{0%{transform:translateX(0);opacity:1}100%{transform:translateX(70%) rotate(10deg);opacity:0}}
+@keyframes swipaper-card-later{0%{transform:translateY(0);opacity:1}100%{transform:translateY(30px);opacity:0}}
+.reset-option{display:flex;gap:12px;margin-top:18px;border:1px solid #e1e8e0;border-radius:14px;padding:15px;align-items:flex-start;cursor:pointer;color:#263a32}
+.reset-option input{width:19px;height:19px;accent-color:#b4534d;flex-shrink:0;margin-top:1px}
+.reset-option strong{display:block;font-size:13px;line-height:1.5}
+.reset-option small{display:block;color:#829187;font-size:11px;line-height:1.65;margin-top:6px}
+@media(max-width:760px){.giraffe-control-row{height:92px;margin:-6px auto -21px}.giraffe-illustration{width:94px;height:121px}}
+@media(prefers-reduced-motion:reduce){.giraffe-motion,.paper-card{animation:none!important}}

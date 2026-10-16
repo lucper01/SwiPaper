@@ -19,6 +19,7 @@ let libraryFilter='liked';
 let loading=false;
 let toastTimer;
 let installing=null;
+let swipeAnimationLocked=false;
 const root=document.querySelector('#view');
 const toastBox=document.querySelector('#toast');
 const el=(id)=>document.getElementById(id);
@@ -52,6 +53,27 @@ function empty(title,description,action='',label=''){
   return '<div class="empty"><div class="symbol">◈</div><h3>'+esc(title)+'</h3><p>'+esc(description)+'</p>'+(action?btn(esc(label),action,'primary'):'')+'</div>';
 }
 function topicById(id){return state.topics.find(t=>t.id===id);}
+function giraffeMascot(){
+  return '<div class="giraffe-illustration" aria-hidden="true" title="La girafe accompagne vos décisions">'+
+    '<svg class="giraffe-svg" viewBox="0 0 172 225" xmlns="http://www.w3.org/2000/svg" focusable="false">'+
+    '<ellipse cx="88" cy="217" rx="51" ry="6" fill="#becbc0" opacity=".35"/>'+
+    '<g class="giraffe-motion">'+
+    '<path d="M72 216 C66 170 72 122 76 75 L108 74 C103 127 106 168 114 216Z" fill="#e7b85b" stroke="#ae7d3f" stroke-width="2.6"/>'+
+    '<path d="M76 81C73 127 69 178 73 214L85 214C82 170 83 122 89 84Z" fill="#f7d98e" opacity=".8"/>'+
+    '<g fill="#a66c3a" opacity=".92"><ellipse cx="98" cy="117" rx="10" ry="15" transform="rotate(18 98 117)"/><ellipse cx="80" cy="142" rx="7" ry="11" transform="rotate(-16 80 142)"/><ellipse cx="101" cy="177" rx="10" ry="13"/><ellipse cx="79" cy="200" rx="6" ry="9"/><ellipse cx="99" cy="85" rx="6" ry="8"/></g>'+
+    '<path d="M71 77C58 69 54 59 59 49C66 42 77 51 82 61Z" fill="#eab960" stroke="#ae7d3f" stroke-width="2"/>'+
+    '<path d="M111 72C126 67 131 58 126 48C117 42 107 53 102 62Z" fill="#eab960" stroke="#ae7d3f" stroke-width="2"/>'+
+    '<path d="M66 51L72 37M102 49L109 35" stroke="#b47d41" stroke-width="5" stroke-linecap="round"/>'+
+    '<circle cx="73" cy="36" r="5.2" fill="#956038"/><circle cx="109" cy="34" r="5.2" fill="#956038"/>'+
+    '<path d="M61 63Q62 39 86 38Q114 37 119 66L115 87Q108 105 90 105Q64 101 61 82Z" fill="#e7b85b" stroke="#ae7d3f" stroke-width="2.5"/>'+
+    '<path d="M64 80Q89 75 113 81Q120 99 109 105L84 108Q61 103 64 80Z" fill="#f6dba5" stroke="#ae7d3f" stroke-width="1.7"/>'+
+    '<ellipse cx="77" cy="66" rx="4.7" ry="6.2" fill="#3d4335"/><circle cx="79" cy="64" r="1.6" fill="#fff"/>'+
+    '<ellipse cx="107" cy="65" rx="4.7" ry="6.2" fill="#3d4335"/><circle cx="109" cy="63" r="1.6" fill="#fff"/>'+
+    '<circle cx="76" cy="92" r="3" fill="#ae7d3f"/><circle cx="105" cy="92" r="3" fill="#ae7d3f"/>'+
+    '<path d="M86 96Q94 101 100 95" stroke="#976744" stroke-width="2.4" stroke-linecap="round" fill="none"/>'+
+    '<circle cx="63" cy="83" r="5" fill="#d98c80" opacity=".55"/><circle cx="117" cy="83" r="5" fill="#d98c80" opacity=".55"/>'+
+    '</g></svg></div>';
+}
 function counts(actions=[]){
   return {liked:actions.filter(x=>x.decision==='liked').length,later:actions.filter(x=>x.decision==='later').length,rejected:actions.filter(x=>x.decision==='rejected').length};
 }
@@ -114,11 +136,28 @@ function renderDiscover(){
     '<div class="discover-grid"><section class="session-column">'+
     '<div class="overview"><div class="stat"><span>ARTICLES GARDÉS</span><strong>'+c.liked+'</strong><span>Votre sélection</span></div><div class="stat"><span>À REVOIR</span><strong>'+c.later+'</strong><span>Pour plus tard</span></div><div class="stat"><span>EXAMINÉS</span><strong>'+s.index+'</strong><span>Dans cette session</span></div></div>'+
     '<div class="progress-wrap"><strong>Votre exploration</strong><span>'+Number(s.index+1)+' / '+s.articles.length+'</span></div><div class="progress"><div style="width:'+Math.round(s.index/s.articles.length*100)+'%"></div></div>'+
-    '<div class="paper-stack">'+paperCard(a)+'</div>'+
+    '<div class="swipe-scene" id="swipe-scene"><div class="paper-stack">'+paperCard(a)+'</div>'+ 
+    '<div class="giraffe-control-row">'+giraffeMascot()+'</div></div>'+
     '<div class="swipe-actions"><button class="circle-btn reject" data-act="reject" aria-label="Pas intéressant" title="Pas intéressant (flèche gauche)">✕</button><button class="circle-btn hold" data-act="later" aria-label="À lire plus tard" title="À lire plus tard (flèche bas)">♧</button><button class="circle-btn like" data-act="like" aria-label="Intéressant" title="Intéressant (flèche droite)">♥</button></div>'+
     '<p class="swipe-help"><kbd>←</kbd> Passer &nbsp; <kbd>↓</kbd> Plus tard &nbsp; <kbd>→</kbd> Garder &nbsp; <kbd>Backspace</kbd> Annuler</p></section>'+
     '<aside class="side-panel"><div class="panel"><p class="eyebrow">SESSION EN COURS</p><h2 class="section-title">Votre progression</h2><div class="line"><span>Intéressants</span><strong>'+c.liked+'</strong></div><div class="line"><span>À examiner</span><strong>'+c.later+'</strong></div><div class="line"><span>Écartés</span><strong>'+c.rejected+'</strong></div><div class="line"><span>Restants</span><strong>'+(s.articles.length-s.index)+'</strong></div></div><div class="soft-panel" style="margin-top:16px"><p class="eyebrow">PETIT RAPPEL</p><div class="card-quote">Lisez moins.<br>Découvrez mieux.</div><p class="tiny muted" style="line-height:1.7">Une session interrompue peut être reprise plus tard sur cet appareil.</p></div></aside></div>';
   attachSwipe();
+}
+function animatedDecision(decision){
+  if(swipeAnimationLocked||!state.active)return;
+  if(!['liked','rejected','later'].includes(decision))return;
+  const scene=el('swipe-scene');
+  const prefersLessMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches===true;
+  if(!scene||prefersLessMotion){decide(decision);return;}
+  swipeAnimationLocked=true;
+  scene.classList.add(decision==='liked'?'swipe-to-right':decision==='rejected'?'swipe-to-left':'swipe-to-later');
+  document.querySelectorAll('.swipe-actions button').forEach(button=>button.disabled=true);
+  const id=state.active.id;
+  const index=state.active.index;
+  window.setTimeout(()=>{
+    swipeAnimationLocked=false;
+    if(state.active?.id===id && state.active.index===index)decide(decision);
+  },460);
 }
 function decide(decision){
   const s=state.active;
@@ -136,6 +175,7 @@ function decide(decision){
   if(s.index>=s.articles.length)finishSession();else render();
 }
 function undo(){
+  if(swipeAnimationLocked)return;
   const s=state.active;
   if(!s||!s.actions.length)return;
   const action=s.actions.pop();
@@ -288,7 +328,7 @@ function attachSwipe(){
     if(!pointer||event.pointerId!==pointer.id)return;
     const dx=pointer.dx,dy=pointer.dy;
     pointer=null;card.classList.remove('dragging');card.style.transform='';
-    if(Math.abs(dx)>95&&Math.abs(dx)>Math.abs(dy)*1.3)decide(dx>0?'liked':'rejected');
+    if(Math.abs(dx)>95&&Math.abs(dx)>Math.abs(dy)*1.3)animatedDecision(dx>0?'liked':'rejected');
   }
   card.addEventListener('pointerup',end);
   card.addEventListener('pointercancel',()=>{pointer=null;card.style.transform='';card.classList.remove('dragging');});
@@ -341,12 +381,46 @@ function renderTopics(){
     (state.topics.length?'<h2 class="section-title">Thématiques enregistrées · '+state.topics.length+'</h2><div class="cards-grid">'+cards+'</div>':empty('Aucune thématique pour le moment','Créez votre premier sujet ci-dessus. Vous pourrez en ajouter autant que nécessaire.'))+
     '<div class="spacer"></div><div class="pill-note">Google Scholar : la recherche automatisée directe n’est pas disponible. '+(state.topics.length?'Ouvrir manuellement dans Scholar : '+state.topics.map(t=>'<a target="_blank" rel="noopener noreferrer" href="'+esc(searchScholar(t))+'">'+esc(t.name)+' ↗</a>').join(' · '):'Vos requêtes pourront être ouvertes dans Google Scholar une fois ajoutées.')+'</div>';
 }
+function openLibraryReset(){
+  if(el('modal-layer'))el('modal-layer').remove();
+  const total=Object.keys(state.library||{}).length;
+  const dialog=document.createElement('div');
+  dialog.className='modal-layer';
+  dialog.id='modal-layer';
+  dialog.innerHTML='<div class="modal" role="dialog" aria-modal="true" aria-labelledby="reset-library-title">'+
+    '<p class="eyebrow">GESTION DE LA BIBLIOTHÈQUE</p><h2 id="reset-library-title">Réinitialiser la bibliothèque ?</h2>'+
+    '<p>Vous allez supprimer <strong>'+total+' article(s) sauvegardé(s) sur cet appareil</strong>. Les thématiques, vos réglages, l’index Zotero et les références RIS resteront inchangés.</p>'+
+    '<div class="pill-note">Par défaut, les articles déjà examinés ne réapparaîtront pas dans les prochains scans.</div>'+
+    '<label class="reset-option" for="reset-all-decisions"><input id="reset-all-decisions" type="checkbox"><span><strong>Oublier aussi tous les articles déjà traités</strong><small>Efface les décisions, l’historique des sessions, les alertes locales et la session en cours. Ces articles pourront réapparaître s’ils ne sont pas déjà dans Zotero ou un import RIS.</small></span></label>'+
+    '<div class="actions" style="flex-wrap:wrap"><button class="btn secondary" type="button" data-act="backup">Sauvegarder avant</button>'+
+    '<button class="btn secondary" type="button" data-act="close-modal">Annuler</button>'+
+    '<button class="btn danger" type="button" data-act="confirm-library-reset">Réinitialiser</button></div></div>';
+  document.body.appendChild(dialog);
+  dialog.querySelector('[data-act="close-modal"]')?.focus();
+}
+function resetLocalLibrary(){
+  const forget=document.querySelector('#reset-all-decisions')?.checked===true;
+  const message=forget?
+    'Supprimer les articles enregistrés, toutes les décisions passées et l’historique local ?':
+    'Effacer uniquement les articles enregistrés dans la bibliothèque locale ?';
+  if(!confirm(message))return;
+  state.library={};
+  if(forget){
+    state.seen={};state.history=[];state.active=null;state.lastSummary=null;
+    state.alerts={lastCheck:null,known:[],unseen:[]};
+  }
+  libraryFilter='liked';
+  el('modal-layer')?.remove();
+  saveAndRender();
+  showToast(forget?'Bibliothèque et historique des décisions réinitialisés.':'Bibliothèque vidée. Les articles déjà traités restent exclus.');
+}
+
 function renderLibrary(){
   const all=Object.values(state.library);
   const chosen=all.filter(x=>x.status===libraryFilter).sort((a,b)=>b.updated.localeCompare(a.updated));
   const tabs=[['liked','Intéressants'],['later','À lire plus tard']];
   const header=pageIntro('VOTRE BIBLIOTHÈQUE','Des articles qui comptent.','Retrouvez les publications sauvegardées au cours de vos sessions.',
-    '<div class="button-row">'+btn('↓ Exporter RIS','export-library-ris','secondary small')+btn('↓ Exporter CSV','export-library-csv','secondary small')+btn('↗ Zotero','zotero-library','primary small')+'</div>');
+    '<div class="button-row">'+btn('↓ Exporter RIS','export-library-ris','secondary small')+btn('↓ Exporter CSV','export-library-csv','secondary small')+btn('↗ Zotero','zotero-library','primary small')+btn('Réinitialiser','reset-library','danger small')+'</div>');
   root.innerHTML=header+'<div class="filters">'+tabs.map(([key,label])=>'<button class="chip '+(key===libraryFilter?'active':'')+'" data-act="library-filter" data-filter="'+key+'">'+label+' · '+all.filter(x=>x.status===key).length+'</button>').join('')+'</div>'+
     (chosen.length?'<div class="list-stack">'+chosen.map(({article:a,status})=>'<article class="list-card"><div><h3>'+esc(a.title)+'</h3><p>'+esc(a.authors.slice(0,3).join(', '))+' · '+esc(a.journal)+' · '+esc(a.year||'')+'</p><div class="meta"><span>'+esc(a.topic)+'</span>'+(a.doi?'<a target="_blank" rel="noopener noreferrer" href="'+esc(a.url)+'">↗ DOI : '+esc(a.doi)+'</a>':'')+(a.pdf?'<a target="_blank" rel="noopener noreferrer" href="'+esc(a.pdf)+'">↗ PDF</a>':'')+'</div></div><div class="button-row">'+(status==='later'?btn('Conserver','promote','secondary small','data-id="'+esc(a.id)+'"'):'')+btn('Retirer','remove-library','ghost small','data-id="'+esc(a.id)+'"')+'</div></article>').join('')+'</div>':empty('Aucun article dans cette catégorie','Commencez une session et glissez les articles qui vous intéressent vers la droite.','go-discover','Découvrir'));
 }
@@ -377,7 +451,7 @@ function renderSettings(){
     '<p class="tiny muted" style="line-height:1.9">Vous pouvez également importer un fichier RIS exporté depuis Zotero, Mendeley, EndNote ou un autre logiciel bibliographique. '+(ei.importedAt?'Dernier import : '+esc(new Date(ei.importedAt).toLocaleString('fr-FR'))+' · '+ei.count+' références.':'Aucune bibliothèque externe importée.')+'</p>'+
     '<div class="button-row">'+btn('↑ Importer un fichier RIS','import-ris','secondary small')+btn('Effacer cet import','clear-ris','ghost small')+'</div>'+
     '<div class="divider"></div><p class="eyebrow">VOS DONNÉES</p><p class="tiny muted" style="line-height:1.9">Vos thèmes, sessions et index bibliographiques restent sur cet appareil. Les clés d’accès ne sont pas incluses dans la sauvegarde. La synchronisation entre différents appareils n’est pas encore disponible.</p>'+
-    '<div class="button-row">'+btn('Sauvegarder','backup','secondary small')+btn('Restaurer','restore','secondary small')+'</div></div></div>';
+    '<div class="button-row">'+btn('Sauvegarder','backup','secondary small')+btn('Restaurer','restore','secondary small')+btn('Réinitialiser la bibliothèque','reset-library','danger small')+'</div></div></div>';
 }
 function importRIS(){
   const input=document.createElement('input');
@@ -460,15 +534,17 @@ document.addEventListener('click',event=>{
   if(!button)return;
   if(button.dataset.view){navigate(button.dataset.view);return;}
   const act=button.dataset.act,id=button.dataset.id;
-  if(act==='like')decide('liked');
-  if(act==='reject')decide('rejected');
-  if(act==='later')decide('later');
+  if(act==='like')animatedDecision('liked');
+  if(act==='reject')animatedDecision('rejected');
+  if(act==='later')animatedDecision('later');
   if(act==='undo')undo();
-  if(act==='finish'){if(confirm('Terminer cette session maintenant ? Les articles non examinés ne seront pas comptabilisés.'))finishSession();}
+  if(act==='finish'&&!swipeAnimationLocked){if(confirm('Terminer cette session maintenant ? Les articles non examinés ne seront pas comptabilisés.'))finishSession();}
   if(act==='reset-summary'){state.lastSummary=null;saveAndRender();}
   if(act==='go-discover')navigate('discover');
   if(act==='go-topics')navigate('topics');
   if(act==='go-settings')navigate('settings');
+  if(act==='reset-library')openLibraryReset();
+  if(act==='confirm-library-reset')resetLocalLibrary();
   if(act==='library-filter'){libraryFilter=button.dataset.filter;render();}
   if(act==='new-topic'){topicEditorId='';render();el('topic-name')?.focus();}
   if(act==='edit-topic'){topicEditorId=id;render();el('topic-name')?.focus();}
@@ -542,9 +618,9 @@ document.addEventListener('keydown',event=>{
   if(event.key==='Escape')el('modal-layer')?.remove();
   if(view!=='discover'||!state.active||event.ctrlKey||event.metaKey||event.altKey)return;
   if(event.target.matches('input,textarea,select,[contenteditable]')||event.target.closest('.modal-layer'))return;
-  if(event.key==='ArrowLeft'){event.preventDefault();decide('rejected');}
-  if(event.key==='ArrowRight'){event.preventDefault();decide('liked');}
-  if(event.key==='ArrowDown'){event.preventDefault();decide('later');}
+  if(event.key==='ArrowLeft'){event.preventDefault();animatedDecision('rejected');}
+  if(event.key==='ArrowRight'){event.preventDefault();animatedDecision('liked');}
+  if(event.key==='ArrowDown'){event.preventDefault();animatedDecision('later');}
   if(event.key==='Backspace'){event.preventDefault();undo();}
 });
 window.addEventListener('hashchange',()=>{view=TITLES[location.hash.slice(1)]?location.hash.slice(1):'discover';render();});

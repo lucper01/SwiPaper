@@ -21,6 +21,7 @@ Swipaper est une application de veille scientifique qui permet de découvrir des
 - Mise de côté d'un article à examiner ultérieurement.
 - Navigation tactile, par boutons ou avec le clavier.
 - Annulation de la dernière décision.
+- Animation d’une girafe au long cou qui accompagne les swipes vers la gauche ou vers la droite.
 - Sessions configurables et reprise d'une session interrompue.
 
 ## Éviter les articles déjà connus
@@ -35,6 +36,8 @@ Swipaper est une application de veille scientifique qui permet de découvrir des
 ## Organiser et exporter
 
 - Bibliothèque des articles intéressants et des articles à revoir.
+- Réinitialisation de la bibliothèque locale avec confirmation, sans effacement des thématiques ou des bibliothèques externes associées.
+- Option pour oublier également les décisions passées et l’historique afin de pouvoir réexaminer les publications.
 - Historique des sessions et statistiques des décisions.
 - Export bibliographique aux formats RIS et CSV.
 - Préparation d'un récapitulatif de session dans l'application de messagerie.
