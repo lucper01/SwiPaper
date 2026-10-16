@@ -42,7 +42,7 @@ test('query translation to providers scopes title and abstract',()=>{
   const c=compileScientificQuery(query,'europepmc','title_abstract');
   assert.match(a,/OR/);assert.match(a,/NOT/);
   assert.match(b,/TITLE:"olfaction"/);assert.match(b,/TITLE:"temporal integration"/);
-  assert.match(c,/TITLE_ABS:"olfaction"/);
+  assert.match(c,/TITLE:"olfaction"/);assert.match(c,/ABSTRACT:"olfaction"/);
   assert.equal(themeScope({scope:'title'}),'title');
   assert.equal(themeScope({}),'title_abstract');
 });

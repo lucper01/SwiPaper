@@ -108,8 +108,11 @@ export function compileScientificQuery(source,provider='openalex',scope='title_a
   const safeScope=scope==='title'?'title':'title_abstract';
   if(provider==='openalex')return emitBoolean(parsed.tree,v=>/\s/.test(v)?'"'+v.replace(/"/g,'')+'"':v);
   if(provider==='europepmc'){
-    const tag=safeScope==='title'?'TITLE':'TITLE_ABS';
-    return emitBoolean(parsed.tree,v=>tag+':"'+v.replace(/"/g,'')+'"');
+    // Europe PMC documents TITLE and ABSTRACT separately; TITLE_ABS is not a portable query field.
+    return emitBoolean(parsed.tree,v=>{
+      const quoted='"'+v.replace(/"/g,'')+'"';
+      return safeScope==='title'?'TITLE:'+quoted:'(TITLE:'+quoted+' OR ABSTRACT:'+quoted+')';
+    });
   }
   throw new Error('Source inconnue.');
 }
