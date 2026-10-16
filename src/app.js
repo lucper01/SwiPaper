@@ -1,15 +1,18 @@
-import { toArticle, deduplicate, openAlexUrl, asRIS, asCSV, zoteroItem, safeUrl } from './core.mjs';
+import { toArticle, toEuropePMCArticle, deduplicate, openAlexUrl, europePmcUrl, cutoffFromPeriod, fingerprints, zoteroFingerprints, isFresh, asRIS, asCSV, zoteroItem } from './core.mjs';
 
 const STORAGE='swipaper-v1-state';
 const TITLES={discover:'Découvrir',library:'Bibliothèque',topics:'Mes thématiques',history:'Historique',settings:'Paramètres'};
 const DEFAULT={
-  topics:[{id:'topic-neuro',name:'Neurosciences cognitives',query:'cognitive neuroscience'},{id:'topic-multi',name:'Intégration multisensorielle',query:'multisensory integration'}],
+  topics:[],
   library:{},seen:{},history:[],active:null,lastSummary:null,alerts:{lastCheck:null,known:[],unseen:[]},
-  prefs:{days:365,batch:20,zoteroUser:'',zoteroCollection:''}
+  zoteroIndex:{user:'',syncedAt:null,keys:[],count:0},
+  prefs:{periodCount:30,periodUnit:'days',sources:['openalex','pubmed'],batch:20,zoteroUser:'',zoteroCollection:''}
 };
 let state=loadState();
 if(!state.alerts||!Array.isArray(state.alerts.known))state.alerts={lastCheck:null,known:[],unseen:[]};
 let alertLoading=false;
+let syncingZotero=false;
+let topicEditorId='';
 let view=TITLES[location.hash.slice(1)]?location.hash.slice(1):'discover';
 let libraryFilter='liked';
 let loading=false;
@@ -24,7 +27,8 @@ function loadState(){
   try {
     const data=JSON.parse(localStorage.getItem(STORAGE)||'null');
     if(data && Array.isArray(data.topics) && data.library && typeof data.library==='object') {
-      return {...structuredClone(DEFAULT),...data,prefs:{...DEFAULT.prefs,...data.prefs}};
+      const migrated=data.topics.filter(t=>!['topic-neuro','topic-multi'].includes(t.id));
+      return {...structuredClone(DEFAULT),...data,topics:migrated,prefs:{...DEFAULT.prefs,...data.prefs},zoteroIndex:data.zoteroIndex||structuredClone(DEFAULT.zoteroIndex)};
     }
   }catch(e){console.warn('Local state unavailable',e);}
   return structuredClone(DEFAULT);
@@ -68,14 +72,24 @@ function navigate(next){
 function setup(){
   const tags=state.topics.map(t=>'<label class="check-chip"><input type="checkbox" name="topic" value="'+esc(t.id)+'" checked><span>'+esc(t.name)+'</span></label>').join('');
   const unread=state.alerts.unseen||[];
-  const notice='<div class="soft-panel" style="margin-bottom:24px"><div class="button-row" style="justify-content:space-between"><div><strong style="font-size:13px">◌ Alertes de veille · '+unread.length+' nouveauté(s)</strong><p class="tiny muted" style="margin:7px 0 0">'+(state.alerts.lastCheck?'Dernière vérification : '+esc(new Date(state.alerts.lastCheck).toLocaleString('fr-FR')):'Première vérification à effectuer')+'</p></div>'+btn(alertLoading?'Vérification…':'↻ Vérifier les nouveautés','check-alerts','secondary small',alertLoading?'disabled':'')+'</div>'+
-    (unread.length?'<div class="divider"></div>'+unread.slice(0,5).map(a=>'<div class="line" style="display:flex;justify-content:space-between;gap:12px;padding:7px 0"><span style="font-size:12px">'+esc(a.title)+'</span>'+(a.url?'<a href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer" class="text-btn" style="white-space:nowrap">Voir ↗</a>':'')+'</div>').join('')+'<button class="text-btn" data-act="clear-alerts">Marquer comme consultées</button>':'')+'</div>';
-  return pageIntro('VOTRE PROCHAINE DÉCOUVERTE','La recherche avance. Vous aussi.','Un abstract à la fois. Explorez les nouvelles publications et conservez seulement celles qui comptent.')+notice+
-    '<div class="session-setup"><div class="panel setup-card"><p class="eyebrow">NOUVELLE SESSION</p><h2>Que souhaitez-vous explorer ?</h2><p>Choisissez vos domaines d’intérêt et la taille de votre session. Swipaper recherche de vrais articles scientifiques et évite les références déjà examinées.</p><form id="session-form" class="form-stack">'+
-    '<div class="field"><label>THÉMATIQUES</label><div class="check-list">'+tags+'</div>'+(!state.topics.length?'<small>Ajoutez d’abord une thématique dans l’espace dédié.</small>':'')+'</div>'+
-    '<div class="form-row"><div class="field"><label for="batch-size">ARTICLES PAR SESSION</label><select id="batch-size" name="batch">'+[10,20,30,50].map(n=>'<option value="'+n+'" '+(state.prefs.batch===n?'selected':'')+'>'+n+' articles</option>').join('')+'</select></div><div class="field"><label for="period">PUBLICATIONS DEPUIS</label><select name="days" id="period">'+[[30,'30 jours'],[90,'3 mois'],[365,'1 an'],[730,'2 ans'],[1825,'5 ans']].map(([n,label])=>'<option value="'+n+'" '+(state.prefs.days===n?'selected':'')+'>'+label+'</option>').join('')+'</select></div></div>'+
-    '<button class="btn" type="submit" '+(loading||!state.topics.length?'disabled':'')+'>'+(loading?'<span class="loading"></span> Recherche des publications…':'Découvrir les articles →')+'</button>'+
-    '</form></div><div class="soft-panel"><p class="eyebrow">LE PRINCIPE</p><div class="card-quote">Find what matters.<br>Skip the rest.</div><div class="divider"></div><p class="muted tiny" style="line-height:1.8">← Pas intéressant<br>→ À conserver<br>↓ À lire plus tard</p><div class="divider"></div><p class="tiny muted">Les sélections restent sauvegardées sur cet appareil. Aucun compte n’est nécessaire.</p></div></div>';
+  const notice=state.topics.length?'<div class="soft-panel" style="margin-bottom:24px"><div class="button-row" style="justify-content:space-between"><div><strong style="font-size:13px">◌ Alertes de veille · '+unread.length+' nouveauté(s)</strong><p class="tiny muted" style="margin:7px 0 0">'+(state.alerts.lastCheck?'Dernière vérification : '+esc(new Date(state.alerts.lastCheck).toLocaleString('fr-FR')):'Première vérification à effectuer')+'</p></div>'+btn(alertLoading?'Vérification…':'↻ Vérifier les nouveautés','check-alerts','secondary small',alertLoading?'disabled':'')+'</div>'+
+    (unread.length?'<div class="divider"></div>'+unread.slice(0,5).map(a=>'<div class="line" style="display:flex;justify-content:space-between;gap:12px;padding:7px 0"><span style="font-size:12px">'+esc(a.title)+'</span>'+(a.url?'<a href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer" class="text-btn" style="white-space:nowrap">Voir ↗</a>':'')+'</div>').join('')+'<button class="text-btn" data-act="clear-alerts">Marquer comme consultées</button>':'')+'</div>':'')+'</div>':'';
+  const period=state.prefs;
+  const src=Array.isArray(period.sources)?period.sources:['openalex','pubmed'];
+  const sourceBox=[['openalex','OpenAlex — multidisciplinaire'],['pubmed','PubMed / Europe PMC — biomédical']].map(([key,label])=>
+    '<label class="check-chip"><input type="checkbox" name="source" value="'+key+'" '+(src.includes(key)?'checked':'')+'><span>'+label+'</span></label>'
+  ).join('');
+  return pageIntro('VOTRE PROCHAINE DÉCOUVERTE','Les nouveaux papiers, sans les doublons.','Définissez vos thématiques, choisissez une période de publication et découvrez uniquement les articles qui restent à examiner.')+notice+
+    '<div class="session-setup"><div class="panel setup-card"><p class="eyebrow">NOUVELLE SESSION</p><h2>Que souhaitez-vous explorer ?</h2><p>Swipaper privilégie les plus récentes publications, puis écarte celles déjà parcourues ou présentes dans votre Zotero synchronisé.</p><form id="session-form" class="form-stack">'+
+    '<div class="field"><label>THÉMATIQUES</label><div class="check-list">'+tags+'</div>'+(!state.topics.length?'<div class="pill-note">Aucune thématique définie. <button class="text-btn" type="button" data-act="go-topics">Créer ma première thématique →</button></div>':'')+'</div>'+
+    '<div class="field"><label>BASES DE PUBLICATIONS</label><div class="check-list">'+sourceBox+'</div><small>La couverture PubMed passe par Europe PMC. Google Scholar n’autorise pas de collecte automatisée officielle.</small></div>'+
+    '<div class="form-row"><div class="field"><label for="batch-size">ARTICLES PAR SESSION</label><select id="batch-size" name="batch">'+[10,20,30,50].map(n=>'<option value="'+n+'" '+(period.batch===n?'selected':'')+'>'+n+' articles</option>').join('')+'</select></div><div class="field"><label for="period-count">PUBLIÉS DEPUIS MOINS DE</label><div class="form-row" style="gap:8px;grid-template-columns:1fr 1.5fr"><input name="periodCount" id="period-count" type="number" min="1" max="3650" step="1" required value="'+esc(period.periodCount||30)+'"><select name="periodUnit" id="period-unit">'+[['days','jours'],['months','mois'],['years','années']].map(([k,v])=>'<option value="'+k+'" '+(period.periodUnit===k?'selected':'')+'>'+v+'</option>').join('')+'</select></div></div></div>'+
+    '<div class="pill-note">'+(period.zoteroUser?
+       'Zotero lié · '+(state.zoteroIndex.user===period.zoteroUser&&state.zoteroIndex.syncedAt?state.zoteroIndex.count+' références vérifiées lors de la dernière synchronisation. Une nouvelle synchronisation sera effectuée avant le scan.':'Première synchronisation nécessaire avant le scan.')+
+       ' <button class="text-btn" type="button" data-act="go-settings">Gérer Zotero →</button>':
+       'Zotero non lié : les publications déjà examinées dans Swipaper seront exclues. <button class="text-btn" type="button" data-act="go-settings">Lier Zotero →</button>')+'</div>'+
+    '<button class="btn" type="submit" '+(loading||!state.topics.length?'disabled':'')+'>'+(loading?'<span class="loading"></span> Recherche et dédoublonnage…':'Découvrir les publications les plus récentes →')+'</button>'+
+    '</form></div><div class="soft-panel"><p class="eyebrow">LE PRINCIPE</p><div class="card-quote">New papers.<br>Fresh discoveries.</div><div class="divider"></div><p class="muted tiny" style="line-height:1.8">← Pas intéressant<br>→ À conserver<br>↓ À lire plus tard</p><div class="divider"></div><p class="tiny muted">Le filtrage utilise la date de publication, pas simplement la date d’indexation. Les articles déjà traités ne sont pas proposés à nouveau.</p></div></div>';
 }
 function paperCard(a){
   const authors=a.authors.slice(0,4).join(', ')+(a.authors.length>4?' et al.':'');
@@ -144,46 +158,74 @@ function endScreen(s){
     '<div class="end-actions">'+btn('Nouvelle session','reset-summary','primary')+btn('Exporter en RIS','export-last-ris','secondary')+btn('Récap par e-mail','email-last','secondary')+btn('Envoyer vers Zotero','zotero-last','secondary')+'</div></div>'+
     '<div class="spacer"></div><div class="pill-note">L’e-mail s’ouvre dans votre application de messagerie pour validation. L’envoi automatique sera disponible dans une future version.</div>';
 }
+function localFingerprints() {
+  const fp=new Set(Object.keys(state.seen||{}));
+  for(const entry of Object.values(state.library||{}))for(const key of fingerprints(entry.article))fp.add(key);
+  // Identifiants hérités de la première version.
+  for(const key of Object.keys(state.seen||{}))if(!key.startsWith('id:'))fp.add(key);
+  return [...fp];
+}
+async function fetchSource(topic,source,cutoff,page,key) {
+  const isPubmed=source==='pubmed';
+  const url=isPubmed?europePmcUrl(topic.query,{cutoff,page,pageSize:75})
+    :openAlexUrl(topic.query,{cutoff,page,perPage:75,key});
+  const response=await fetch(url,{headers:{Accept:'application/json'}});
+  if(!response.ok)throw new Error((isPubmed?'Europe PMC':'OpenAlex')+' HTTP '+response.status);
+  const data=await response.json();
+  return (isPubmed?(data.resultList?.result||[]).map(w=>toEuropePMCArticle(w,topic.name))
+    :(data.results||[]).map(w=>toArticle(w,topic.name)))
+    .filter(a=>a.abstract.length>35&&a.date&&a.url);
+}
 async function startSession(form){
   if(loading)return;
-  const ids=[...form.querySelectorAll('input[name=topic]:checked')].map(i=>i.value);
+  const fd=new FormData(form);
+  const ids=fd.getAll('topic');
+  const sources=fd.getAll('source').filter(v=>['openalex','pubmed'].includes(v));
   const selected=ids.map(topicById).filter(Boolean);
   if(!selected.length){showToast('Sélectionnez au moins une thématique.');return;}
-  const batch=Math.min(50,Math.max(10,Number(form.elements.batch.value)||20));
-  const days=Number(form.elements.days.value)||365;
-  state.prefs.batch=batch;state.prefs.days=days;persist();
+  if(!sources.length){showToast('Sélectionnez au moins une source bibliographique.');return;}
+  const batch=Math.min(50,Math.max(10,Number(fd.get('batch'))||20));
+  const periodCount=Number(fd.get('periodCount'));
+  const periodUnit=String(fd.get('periodUnit')||'days');
+  let cutoff;
+  try{cutoff=cutoffFromPeriod(periodCount,periodUnit);}catch(error){showToast(error.message);return;}
+  state.prefs.batch=batch;state.prefs.periodCount=periodCount;
+  state.prefs.periodUnit=periodUnit;state.prefs.sources=sources;persist();
   loading=true;render();
-  const buckets=selected.map(()=>[]);const errors=[];
+  const errors=[];
   try{
-    for(let page=1;page<=3;page++){
-      const results=await Promise.allSettled(selected.map(async(t)=>{
-        const key=sessionStorage.getItem('swipaper-openalex')||'';
-        const response=await fetch(openAlexUrl(t.query,{days,perPage:50,page,key}),{headers:{Accept:'application/json'}});
-        if(!response.ok)throw new Error(response.status===429?'Limite de requêtes OpenAlex atteinte':('OpenAlex HTTP '+response.status));
-        const data=await response.json();
-        return (data.results||[]).map(w=>toArticle(w,t.name)).filter(a=>a.abstract.length>35);
-      }));
+    // Toujours synchroniser l'intégralité du Zotero lié avant d'annoncer qu'un article est nouveau.
+    if(state.prefs.zoteroUser)await syncZoteroLibrary({silent:true});
+    const zotero=state.prefs.zoteroUser?state.zoteroIndex.keys:[];
+    const seen=localFingerprints();
+    const key=sessionStorage.getItem('swipaper-openalex')||'';
+    const pools=selected.flatMap(topic=>sources.map(source=>({topic,source,articles:[],exhausted:false})));
+    for(let page=1;page<=5;page++){
+      const active=pools.filter(p=>!p.exhausted);
+      if(!active.length)break;
+      const results=await Promise.allSettled(active.map(async p=>fetchSource(p.topic,p.source,cutoff,page,key)));
       results.forEach((result,i)=>{
-        if(result.status==='fulfilled')buckets[i].push(...result.value);
-        else errors.push(selected[i].name+': '+(result.reason?.message||'Erreur réseau'));
+        if(result.status==='rejected'){
+          errors.push(active[i].topic.name+' / '+active[i].source+' : '+(result.reason?.message||'Erreur réseau'));
+          active[i].exhausted=true;
+        }else{
+          active[i].articles.push(...result.value);
+          if(result.value.length<10)active[i].exhausted=true;
+        }
       });
-      const unique=deduplicate(buckets.flat()).filter(a=>!state.seen[a.id]&&!state.library[a.id]);
-      if(unique.length>=batch||results.every(r=>r.status==='rejected'))break;
+      const fresh=deduplicate(pools.flatMap(p=>p.articles).sort((a,b)=>b.date.localeCompare(a.date)))
+        .filter(a=>isFresh(a,{cutoff,seen,zotero}));
+      if(fresh.length>=batch||results.every(r=>r.status==='rejected'))break;
     }
-    const merged=[];const all=buckets.map(b=>deduplicate(b).filter(a=>!state.seen[a.id]&&!state.library[a.id]));
-    let cursor=0;let progress=true;const used=new Set();
-    while(progress&&merged.length<batch){
-      progress=false;
-      for(let i=0;i<all.length&&merged.length<batch;i++){
-        const a=all[i][cursor];
-        if(a){progress=true;if(!used.has(a.id)){used.add(a.id);merged.push(a);}}
-      }
-      cursor++;
+    if(pools.every(p=>p.articles.length===0)){
+      throw new Error('Toutes les sources sont indisponibles. '+errors.join(' ; '));
     }
-    if(!merged.length)throw new Error(errors.length?errors[0]:'Aucun nouvel article avec résumé disponible. Essayez une période plus longue ou d’autres mots-clés.');
-    state.active={id:uid(),started:new Date().toISOString(),articles:merged,index:0,actions:[]};
+    const merged=deduplicate(pools.flatMap(p=>p.articles).sort((a,b)=>b.date.localeCompare(a.date)))
+      .filter(a=>isFresh(a,{cutoff,seen,zotero})).slice(0,batch);
+    if(!merged.length)throw new Error('Aucun article inédit avec résumé pour cette période : élargissez-la ou changez les mots-clés.');
+    state.active={id:uid(),started:new Date().toISOString(),articles:merged,index:0,actions:[],cutoff,sources};
     state.lastSummary=null;persist();
-    if(errors.length)showToast('Certaines thématiques sont indisponibles. '+errors[0]);
+    if(errors.length)showToast('Résultats partiels : '+errors[0]);
   }catch(error){showToast('Recherche impossible : '+error.message);}
   finally{loading=false;render();}
 }
