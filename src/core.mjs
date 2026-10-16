@@ -124,10 +124,10 @@ export function isFresh(article,{cutoff,seen=[],saved=[],zotero=[]}={}) {
   const known=new Set([...seen,...saved,...zotero]);
   return !fingerprints(article).some(k=>known.has(k));
 }
-export function openAlexUrl(query,{cutoff='',days=365,perPage=50,page=1,key=''}={}) {
+export function openAlexUrl(query,{cutoff='',days=365,perPage=50,page=1,key='',scope='title_abstract'}={}) {
   const start=cutoff||cutoffFromPeriod(days,'days');
   const url=new URL('https://api.openalex.org/works');
-  url.searchParams.set('search',String(query).trim());
+  url.searchParams.set(scope==='title'?'search.title':'search.title_and_abstract',String(query).trim());
   url.searchParams.set('filter','from_publication_date:'+start+',has_abstract:true');
   url.searchParams.set('sort','publication_date:desc');
   url.searchParams.set('per_page',String(Math.min(Math.max(1,perPage),100)));
