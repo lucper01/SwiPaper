@@ -4,10 +4,12 @@ const STORAGE='swipaper-v1-state';
 const TITLES={discover:'Découvrir',library:'Bibliothèque',topics:'Mes thématiques',history:'Historique',settings:'Paramètres'};
 const DEFAULT={
   topics:[{id:'topic-neuro',name:'Neurosciences cognitives',query:'cognitive neuroscience'},{id:'topic-multi',name:'Intégration multisensorielle',query:'multisensory integration'}],
-  library:{},seen:{},history:[],active:null,lastSummary:null,
+  library:{},seen:{},history:[],active:null,lastSummary:null,alerts:{lastCheck:null,known:[],unseen:[]},
   prefs:{days:365,batch:20,zoteroUser:'',zoteroCollection:''}
 };
 let state=loadState();
+if(!state.alerts||!Array.isArray(state.alerts.known))state.alerts={lastCheck:null,known:[],unseen:[]};
+let alertLoading=false;
 let view=TITLES[location.hash.slice(1)]?location.hash.slice(1):'discover';
 let libraryFilter='liked';
 let loading=false;
@@ -65,7 +67,10 @@ function navigate(next){
 }
 function setup(){
   const tags=state.topics.map(t=>'<label class="check-chip"><input type="checkbox" name="topic" value="'+esc(t.id)+'" checked><span>'+esc(t.name)+'</span></label>').join('');
-  return pageIntro('VOTRE PROCHAINE DÉCOUVERTE','La recherche avance. Vous aussi.','Un abstract à la fois. Explorez les nouvelles publications et conservez seulement celles qui comptent.')+
+  const unread=state.alerts.unseen||[];
+  const notice='<div class="soft-panel" style="margin-bottom:24px"><div class="button-row" style="justify-content:space-between"><div><strong style="font-size:13px">◌ Alertes de veille · '+unread.length+' nouveauté(s)</strong><p class="tiny muted" style="margin:7px 0 0">'+(state.alerts.lastCheck?'Dernière vérification : '+esc(new Date(state.alerts.lastCheck).toLocaleString('fr-FR')):'Première vérification à effectuer')+'</p></div>'+btn(alertLoading?'Vérification…':'↻ Vérifier les nouveautés','check-alerts','secondary small',alertLoading?'disabled':'')+'</div>'+
+    (unread.length?'<div class="divider"></div>'+unread.slice(0,5).map(a=>'<div class="line" style="display:flex;justify-content:space-between;gap:12px;padding:7px 0"><span style="font-size:12px">'+esc(a.title)+'</span>'+(a.url?'<a href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer" class="text-btn" style="white-space:nowrap">Voir ↗</a>':'')+'</div>').join('')+'<button class="text-btn" data-act="clear-alerts">Marquer comme consultées</button>':'')+'</div>';
+  return pageIntro('VOTRE PROCHAINE DÉCOUVERTE','La recherche avance. Vous aussi.','Un abstract à la fois. Explorez les nouvelles publications et conservez seulement celles qui comptent.')+notice+
     '<div class="session-setup"><div class="panel setup-card"><p class="eyebrow">NOUVELLE SESSION</p><h2>Que souhaitez-vous explorer ?</h2><p>Choisissez vos domaines d’intérêt et la taille de votre session. Swipaper recherche de vrais articles scientifiques et évite les références déjà examinées.</p><form id="session-form" class="form-stack">'+
     '<div class="field"><label>THÉMATIQUES</label><div class="check-list">'+tags+'</div>'+(!state.topics.length?'<small>Ajoutez d’abord une thématique dans l’espace dédié.</small>':'')+'</div>'+
     '<div class="form-row"><div class="field"><label for="batch-size">ARTICLES PAR SESSION</label><select id="batch-size" name="batch">'+[10,20,30,50].map(n=>'<option value="'+n+'" '+(state.prefs.batch===n?'selected':'')+'>'+n+' articles</option>').join('')+'</select></div><div class="field"><label for="period">PUBLICATIONS DEPUIS</label><select name="days" id="period">'+[[30,'30 jours'],[90,'3 mois'],[365,'1 an'],[730,'2 ans'],[1825,'5 ans']].map(([n,label])=>'<option value="'+n+'" '+(state.prefs.days===n?'selected':'')+'>'+label+'</option>').join('')+'</select></div></div>'+
@@ -186,7 +191,7 @@ function attachSwipe(){
   const card=el('swipe-card');if(!card)return;
   let pointer=null;
   card.addEventListener('pointerdown',event=>{
-    if(event.target.closest('a')||event.target.closest('.abstract'))return;
+    if(event.target.closest('a')||(event.pointerType==='mouse'&&event.target.closest('.abstract')))return;
     if(event.pointerType==='mouse'&&event.button!==0)return;
     pointer={id:event.pointerId,x:event.clientX,y:event.clientY,dx:0,dy:0};
     card.classList.add('dragging');
@@ -208,6 +213,36 @@ function attachSwipe(){
   card.addEventListener('pointerup',end);
   card.addEventListener('pointercancel',()=>{pointer=null;card.style.transform='';card.classList.remove('dragging');});
 }
+async function checkNewPapers(manual=false) {
+  if(alertLoading||!navigator.onLine)return;
+  if(!state.topics.length){if(manual)showToast('Créez une thématique pour lancer la veille.');return;}
+  const last=state.alerts.lastCheck?Date.parse(state.alerts.lastCheck):0;
+  if(!manual&&Date.now()-last<24*3600*1000)return;
+  alertLoading=true;if(manual)render();
+  try{
+    const key=sessionStorage.getItem('swipaper-openalex')||'';
+    const results=await Promise.allSettled(state.topics.map(async t=>{
+      const response=await fetch(openAlexUrl(t.query,{days:30,perPage:50,key}),{headers:{Accept:'application/json'}});
+      if(!response.ok)throw new Error('OpenAlex HTTP '+response.status);
+      const data=await response.json();
+      return (data.results||[]).map(w=>toArticle(w,t.name)).filter(a=>a.abstract.length>35);
+    }));
+    const ok=results.filter(r=>r.status==='fulfilled');
+    if(!ok.length)throw new Error('Sources indisponibles.');
+    const found=deduplicate(ok.flatMap(r=>r.value));
+    const known=new Set(state.alerts.known||[]);
+    const first=!state.alerts.lastCheck;
+    const fresh=first?[]:found.filter(a=>!known.has(a.id)&&!state.seen[a.id]);
+    state.alerts.known=Array.from(new Set([...known,...found.map(a=>a.id)])).slice(-4000);
+    state.alerts.unseen=deduplicate([...(state.alerts.unseen||[]),...fresh]).slice(-100);
+    state.alerts.lastCheck=new Date().toISOString();
+    persist();
+    if(manual)showToast(first?'Veille initialisée : les prochains articles détectés seront signalés.':fresh.length+' nouvelle(s) publication(s) détectée(s).');
+    if(ok.length<state.topics.length)showToast('La veille a été partiellement actualisée.');
+  }catch(error){if(manual)showToast('Veille indisponible : '+error.message);}
+  finally{alertLoading=false;render();}
+}
+
 function renderTopics(){
   const cards=state.topics.map(t=>'<article class="topic-card"><div class="icon-tile">◎</div><h3>'+esc(t.name)+'</h3><p>'+esc(t.query)+'</p><div class="bottom"><span class="tag alt">Thématique</span><div class="button-row"><button class="text-btn" data-act="edit-topic" data-id="'+esc(t.id)+'">Modifier</button><button class="text-btn danger" data-act="delete-topic" data-id="'+esc(t.id)+'">Supprimer</button></div></div></article>').join('');
   root.innerHTML=pageIntro('VOS CENTRES D’INTÉRÊT','Chaque curiosité a sa place.','Définissez vos sujets de recherche. Chaque thématique correspond à une requête utilisée pour trouver les publications récentes.',btn('+ Nouvelle thématique','new-topic','primary'))+
@@ -342,6 +377,8 @@ document.addEventListener('click',event=>{
   if(act==='history-email'){const s=state.history.find(x=>x.id===id);if(s)emailItems(selectedFromSession(s));}
   if(act==='backup')backup();
   if(act==='restore')restore();
+  if(act==='check-alerts')checkNewPapers(true);
+  if(act==='clear-alerts'){state.alerts.unseen=[];saveAndRender();}
 });
 document.addEventListener('submit',event=>{
   event.preventDefault();
@@ -382,3 +419,4 @@ window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();ins
 el('install-button').addEventListener('click',async()=>{if(!installing)return;installing.prompt();await installing.userChoice;installing=null;el('install-button').hidden=true;});
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.warn));
 updateNetwork();render();
+if(navigator.onLine)checkNewPapers(false);
