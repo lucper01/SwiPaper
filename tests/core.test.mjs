@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {abstractFromIndex,cleanDoi,safeUrl,toArticle,toEuropePMCArticle,deduplicate,asRIS,asCSV,zoteroItem,openAlexUrl,europePmcUrl,cutoffFromPeriod,fingerprints,zoteroFingerprints,isFresh,normalizeTitle} from '../src/core.mjs';
+import {abstractFromIndex,cleanDoi,safeUrl,toArticle,toEuropePMCArticle,deduplicate,asRIS,asCSV,zoteroItem,openAlexUrl,europePmcUrl,cutoffFromPeriod,fingerprints,zoteroFingerprints,isFresh,normalizeTitle,risFingerprints} from '../src/core.mjs';
 test('reconstruct abstract',()=>{assert.equal(abstractFromIndex({world:[1],hello:[0]}),'hello world');assert.equal(abstractFromIndex(null),'');});
 test('identifiers and URL sanitizing',()=>{assert.equal(cleanDoi('https://doi.org/10.1234/ABC'),'10.1234/ABC');assert.equal(safeUrl('javascript:alert(1)'),'');});
 test('publication period using calendar days, months and years',()=>{
@@ -36,4 +36,12 @@ test('Zotero title-based fallback matches papers without DOI',()=>{
   const a={id:'pmid:444',date:'2026-10-01',title:'Neural correlates of olfactory perception and attention',pmid:'444'};
   const z=zoteroFingerprints({data:{title:'Neural correlates of olfactory perception and attention',DOI:''}});
   assert.equal(isFresh(a,{cutoff:'2026-09-01',zotero:z}),false);
+});
+
+test('RIS library import excludes article DOI and title',()=>{
+  const input='TY  - JOUR\nTI  - Olfactory perception and neural attention mechanisms\nDO  - 10.1234/ABC\nER  - \nTY  - JOUR\nTI  - Crossmodal temporal binding in visual perception\nER  - \n';
+  const result=risFingerprints(input);
+  assert.equal(result.count,2);
+  assert.ok(result.keys.includes('doi:10.1234/abc'));
+  assert.ok(result.keys.includes('title:crossmodal temporal binding in visual perception'));
 });
