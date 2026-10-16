@@ -1,45 +1,50 @@
 # Swipaper
 
-**Swipaper** est une application de veille scientifique permettant de découvrir des publications récentes, de consulter leurs résumés et de sélectionner les articles pertinents par balayage (*swipe*).
+Swipaper est une application de veille scientifique qui permet de découvrir des publications récentes, de consulter leurs résumés et de sélectionner les articles pertinents par *swipe*.
 
-## Découverte des publications
+## Explorer la littérature scientifique
 
-- Recherche de publications scientifiques réelles à partir de thématiques personnalisées.
-- Consultation du titre, des auteurs, de la revue, de la date et du résumé de chaque publication.
-- Accès aux DOI, aux pages des articles et aux PDF en accès ouvert lorsqu'un lien est disponible.
-- Choix de la période de publication à explorer.
-- Vérification des nouvelles publications à l'ouverture de l'application ou sur demande.
-- Signalement et consultation des références nouvelles repérées par thématique.
+- Recherche de publications scientifiques à partir de thématiques créées par l'utilisateur, sans thématiques imposées.
+- Création, modification et suppression de thématiques, avec mots-clés personnalisés.
+- Exploration des références d'OpenAlex et de PubMed / Europe PMC.
+- Accès à une recherche manuelle sur Google Scholar depuis les thématiques.
+- Choix des sources consultées pour chaque session.
+- Sélection d'une période de publication en nombre de jours, de mois ou d'années.
+- Présentation prioritaire des articles les plus récents, avec leur date de publication.
+- Lecture du titre, des auteurs, de la revue, du résumé et des identifiants bibliographiques disponibles.
+- Ouverture de la publication par son DOI et consultation du PDF lorsqu'un lien est disponible.
 
-## Sélection des articles
+## Sélectionner les articles
 
 - Swipe à droite pour conserver un article intéressant.
-- Swipe à gauche pour écarter une publication.
-- Mise de côté des articles à examiner ultérieurement.
-- Navigation tactile, par boutons et avec le clavier.
+- Swipe à gauche pour écarter un article.
+- Mise de côté d'un article à examiner ultérieurement.
+- Navigation tactile, par boutons ou avec le clavier.
 - Annulation de la dernière décision.
-- Détection des doublons et suivi des publications examinées.
+- Sessions configurables et reprise d'une session interrompue.
 
-## Veille et organisation
+## Éviter les articles déjà connus
 
-- Création, modification et suppression de thématiques scientifiques.
-- Sessions de découverte configurables.
-- Reprise d'une session interrompue.
-- Bibliothèque des articles retenus et mis en attente.
-- Historique des sessions et statistiques de sélection.
+- Exclusion des publications précédemment examinées dans Swipaper.
+- Élimination des doublons entre les différentes sources bibliographiques.
+- Vérification des références d'une bibliothèque Zotero associée avant chaque nouvelle session.
+- Exclusion des articles déjà présents dans Zotero par comparaison des DOI, PMID et titres.
+- Import de références au format RIS depuis d'autres gestionnaires bibliographiques pour exclure les articles correspondants.
+- Distinction entre la date de publication d'un article et la date de son indexation.
 
-## Export et partage
+## Organiser et exporter
 
-- Export de références aux formats RIS et CSV.
-- Préparation d'un récapitulatif de sélection dans l'application de messagerie.
-- Envoi des références bibliographiques vers Zotero avec choix facultatif d'une collection.
-- Conservation des DOI et des liens accessibles vers les articles.
+- Bibliothèque des articles intéressants et des articles à revoir.
+- Historique des sessions et statistiques des décisions.
+- Export bibliographique aux formats RIS et CSV.
+- Préparation d'un récapitulatif de session dans l'application de messagerie.
+- Ajout de références à Zotero, avec possibilité de choisir une collection de destination.
+- Vérification des nouvelles références scientifiques depuis l'application.
 
-## Utilisation
+## Utiliser l'application
 
-- Application web installable sur ordinateur, tablette et téléphone (PWA).
-- Interface adaptable aux écrans et à la navigation tactile.
-- Sauvegarde locale des préférences, des sélections et de l'historique.
+- Application web installable sur téléphone, tablette et ordinateur.
+- Interface responsive avec navigation adaptée aux écrans tactiles.
+- Sauvegarde locale des thématiques, sélections, sessions et préférences.
+- Export et restauration de sauvegardes personnelles.
 - Consultation hors ligne des informations déjà enregistrées sur l'appareil.
-
-**Version 0.1 :** les alertes envoyées lorsque l'application est fermée, l'envoi d'e-mails sans validation et la synchronisation entre plusieurs appareils ne sont pas encore disponibles.
