@@ -123,9 +123,10 @@ function decide(decision){
   if(!s||s.index>=s.articles.length)return;
   const a=s.articles[s.index];
   const previous=state.library[a.id]||null;
-  const priorSeen=state.seen[a.id]||null;
-  s.actions.push({decision,article:a,previous,priorSeen});
-  state.seen[a.id]=new Date().toISOString();
+  const keys=fingerprints(a);
+  const priorSeenEntries=keys.map(key=>[key,state.seen[key]||null]);
+  s.actions.push({decision,article:a,previous,priorSeenEntries});
+  for(const key of keys)state.seen[key]=new Date().toISOString();
   if(decision==='liked'||decision==='later') state.library[a.id]={article:a,status:decision,updated:new Date().toISOString()};
   else delete state.library[a.id];
   s.index++;
@@ -138,7 +139,9 @@ function undo(){
   const action=s.actions.pop();
   s.index=Math.max(0,s.index-1);
   if(action.previous)state.library[action.article.id]=action.previous;else delete state.library[action.article.id];
-  if(action.priorSeen)state.seen[action.article.id]=action.priorSeen;else delete state.seen[action.article.id];
+  for(const [key,date] of (action.priorSeenEntries||[[action.article.id,action.priorSeen||null]])){
+    if(date)state.seen[key]=date;else delete state.seen[key];
+  }
   saveAndRender();
 }
 function finishSession(){
@@ -158,6 +161,39 @@ function endScreen(s){
     '<div class="end-actions">'+btn('Nouvelle session','reset-summary','primary')+btn('Exporter en RIS','export-last-ris','secondary')+btn('Récap par e-mail','email-last','secondary')+btn('Envoyer vers Zotero','zotero-last','secondary')+'</div></div>'+
     '<div class="spacer"></div><div class="pill-note">L’e-mail s’ouvre dans votre application de messagerie pour validation. L’envoi automatique sera disponible dans une future version.</div>';
 }
+async function syncZoteroLibrary({silent=false}={}){
+  if(syncingZotero)throw new Error('Une synchronisation Zotero est déjà en cours.');
+  const user=String(state.prefs.zoteroUser||'').trim();
+  const key=sessionStorage.getItem('swipaper-zotero')||'';
+  if(!user)return;
+  if(!/^\d+$/.test(user))throw new Error('Identifiant Zotero invalide.');
+  if(!key)throw new Error('Clé Zotero absente : renseignez-la dans Paramètres pour filtrer votre bibliothèque.');
+  syncingZotero=true;
+  let count=0,finished=false;
+  const keys=new Set();
+  try{
+    for(let start=0;start<15000;start+=100){
+      const url='https://api.zotero.org/users/'+encodeURIComponent(user)+'/items/top?limit=100&start='+start+'&format=json';
+      const response=await fetch(url,{
+        headers:{'Zotero-API-Version':'3','Zotero-API-Key':key,Accept:'application/json'}
+      });
+      if(!response.ok)throw new Error('Lecture Zotero HTTP '+response.status+'. Vérifiez la clé API et ses permissions.');
+      const rows=await response.json();
+      if(!Array.isArray(rows))throw new Error('Réponse Zotero inattendue.');
+      for(const item of rows){
+        if(['attachment','note','annotation'].includes(item?.data?.itemType))continue;
+        count++;
+        for(const fp of zoteroFingerprints(item))keys.add(fp);
+      }
+      if(rows.length<100){finished=true;break;}
+    }
+    if(!finished)throw new Error('Bibliothèque de plus de 15 000 entrées : synchronisation incomplète. Aucun filtrage Zotero ne sera annoncé.');
+    state.zoteroIndex={user,keys:[...keys],count,syncedAt:new Date().toISOString()};
+    persist();
+    if(!silent)showToast(count+' références Zotero synchronisées. Les articles correspondants seront ignorés.');
+  }finally{syncingZotero=false;render();}
+}
+
 function localFingerprints() {
   const fp=new Set(Object.keys(state.seen||{}));
   for(const entry of Object.values(state.library||{}))for(const key of fingerprints(entry.article))fp.add(key);
@@ -262,33 +298,46 @@ async function checkNewPapers(manual=false) {
   if(!manual&&Date.now()-last<24*3600*1000)return;
   alertLoading=true;if(manual)render();
   try{
+    if(state.prefs.zoteroUser)await syncZoteroLibrary({silent:true});
+    const cutoff=cutoffFromPeriod(state.prefs.periodCount||30,state.prefs.periodUnit||'days');
+    const sources=Array.isArray(state.prefs.sources)?state.prefs.sources:['openalex','pubmed'];
     const key=sessionStorage.getItem('swipaper-openalex')||'';
-    const results=await Promise.allSettled(state.topics.map(async t=>{
-      const response=await fetch(openAlexUrl(t.query,{days:30,perPage:50,key}),{headers:{Accept:'application/json'}});
-      if(!response.ok)throw new Error('OpenAlex HTTP '+response.status);
-      const data=await response.json();
-      return (data.results||[]).map(w=>toArticle(w,t.name)).filter(a=>a.abstract.length>35);
-    }));
-    const ok=results.filter(r=>r.status==='fulfilled');
-    if(!ok.length)throw new Error('Sources indisponibles.');
-    const found=deduplicate(ok.flatMap(r=>r.value));
+    const tasks=state.topics.flatMap(topic=>sources.map(source=>({topic,source})));
+    if(!tasks.length)throw new Error('Sélectionnez une source bibliographique.');
+    const results=await Promise.allSettled(tasks.map(x=>fetchSource(x.topic,x.source,cutoff,1,key)));
+    const valid=results.filter(r=>r.status==='fulfilled');
+    if(!valid.length)throw new Error('Sources indisponibles ou accès bloqué.');
+    const fromLibrary=localFingerprints();
+    const zotero=state.prefs.zoteroUser?state.zoteroIndex.keys:[];
+    const found=deduplicate(valid.flatMap(r=>r.value).sort((a,b)=>b.date.localeCompare(a.date)))
+      .filter(a=>isFresh(a,{cutoff,seen:fromLibrary,zotero}));
     const known=new Set(state.alerts.known||[]);
     const first=!state.alerts.lastCheck;
-    const fresh=first?[]:found.filter(a=>!known.has(a.id)&&!state.seen[a.id]);
-    state.alerts.known=Array.from(new Set([...known,...found.map(a=>a.id)])).slice(-4000);
-    state.alerts.unseen=deduplicate([...(state.alerts.unseen||[]),...fresh]).slice(-100);
-    state.alerts.lastCheck=new Date().toISOString();
+    const fresh=first?[]:found.filter(a=>!fingerprints(a).some(fp=>known.has(fp)));
+    for(const a of found)for(const fp of fingerprints(a))known.add(fp);
+    state.alerts.known=[...known].slice(-6000);
+    state.alerts.unseen=deduplicate([...(state.alerts.unseen||[]),...fresh])
+      .filter(a=>isFresh(a,{cutoff,seen:fromLibrary,zotero})).slice(0,100);
+    // Une source en échec ne doit pas devenir un point de référence déclaré comme entièrement vérifié.
+    if(valid.length===results.length)state.alerts.lastCheck=new Date().toISOString();
     persist();
-    if(manual)showToast(first?'Veille initialisée : les prochains articles détectés seront signalés.':fresh.length+' nouvelle(s) publication(s) détectée(s).');
-    if(ok.length<state.topics.length)showToast('La veille a été partiellement actualisée.');
+    if(manual)showToast(first?'Veille initialisée sur les sources disponibles.':fresh.length+' nouvelle(s) publication(s) repérée(s).');
+    if(valid.length<results.length)showToast('Veille partielle : certaines sources sont indisponibles et seront réessayées.');
   }catch(error){if(manual)showToast('Veille indisponible : '+error.message);}
   finally{alertLoading=false;render();}
 }
-
 function renderTopics(){
-  const cards=state.topics.map(t=>'<article class="topic-card"><div class="icon-tile">◎</div><h3>'+esc(t.name)+'</h3><p>'+esc(t.query)+'</p><div class="bottom"><span class="tag alt">Thématique</span><div class="button-row"><button class="text-btn" data-act="edit-topic" data-id="'+esc(t.id)+'">Modifier</button><button class="text-btn danger" data-act="delete-topic" data-id="'+esc(t.id)+'">Supprimer</button></div></div></article>').join('');
-  root.innerHTML=pageIntro('VOS CENTRES D’INTÉRÊT','Chaque curiosité a sa place.','Définissez vos sujets de recherche. Chaque thématique correspond à une requête utilisée pour trouver les publications récentes.',btn('+ Nouvelle thématique','new-topic','primary'))+
-    '<div class="cards-grid">'+cards+'<button class="topic-card align-center" data-act="new-topic" style="border-style:dashed;align-items:center;justify-content:center;min-height:190px"><span class="icon-tile">＋</span><strong>Ajouter un sujet</strong><span class="muted tiny">Nouveau champ de recherche</span></button></div>';
+  const editing=topicById(topicEditorId)||{id:'',name:'',query:''};
+  const cards=state.topics.map(t=>'<article class="topic-card"><div class="icon-tile">◎</div><h3>'+esc(t.name)+'</h3><p>'+esc(t.query)+'</p><div class="bottom"><span class="tag alt">Thématique active</span><div class="button-row"><button class="text-btn" data-act="edit-topic" data-id="'+esc(t.id)+'">Modifier</button><button class="text-btn danger" data-act="delete-topic" data-id="'+esc(t.id)+'">Supprimer</button></div></div></article>').join('');
+  const searchScholar=(t)=>'https://scholar.google.com/scholar?q='+encodeURIComponent(t.query);
+  root.innerHTML=pageIntro('VOS CENTRES D’INTÉRÊT','Vos thématiques, vos recherches.','Aucune thématique imposée : créez uniquement les sujets que vous souhaitez suivre.')+
+    '<div class="panel" style="margin-bottom:25px"><h2 class="section-title">'+(editing.id?'Modifier la thématique':'Ajouter une thématique')+'</h2>'+
+    '<form id="topic-form" class="form-stack"><input type="hidden" name="topicId" value="'+esc(editing.id)+'">'+
+    '<div class="form-row"><div class="field"><label for="topic-name">NOM DE LA THÉMATIQUE</label><input id="topic-name" name="topicName" required maxlength="70" placeholder="Ex. Perception temporelle" value="'+esc(editing.name)+'"></div>'+
+    '<div class="field"><label for="topic-query">MOTS-CLÉS DE RECHERCHE</label><input id="topic-query" name="topicQuery" required maxlength="300" placeholder="Ex. temporal binding window multisensory" value="'+esc(editing.query)+'"></div></div>'+
+    '<div class="button-row"><button class="btn" type="submit">'+(editing.id?'Enregistrer les modifications':'＋ Ajouter la thématique')+'</button>'+(editing.id?btn('Annuler','cancel-topic-edit','secondary'):'')+'</div></form></div>'+
+    (state.topics.length?'<h2 class="section-title">Thématiques enregistrées · '+state.topics.length+'</h2><div class="cards-grid">'+cards+'</div>':empty('Aucune thématique pour le moment','Créez votre premier sujet ci-dessus. Vous pourrez en ajouter autant que nécessaire.'))+
+    '<div class="spacer"></div><div class="pill-note">Google Scholar : la recherche automatisée directe n’est pas disponible. '+(state.topics.length?'Ouvrir manuellement dans Scholar : '+state.topics.map(t=>'<a target="_blank" rel="noopener noreferrer" href="'+esc(searchScholar(t))+'">'+esc(t.name)+' ↗</a>').join(' · '):'Vos requêtes pourront être ouvertes dans Google Scholar une fois ajoutées.')+'</div>';
 }
 function openTopicModal(id=''){
   const t=topicById(id)||{id:'',name:'',query:''};
@@ -399,12 +448,21 @@ document.addEventListener('click',event=>{
   if(act==='finish'){if(confirm('Terminer cette session maintenant ? Les articles non examinés ne seront pas comptabilisés.'))finishSession();}
   if(act==='reset-summary'){state.lastSummary=null;saveAndRender();}
   if(act==='go-discover')navigate('discover');
+  if(act==='go-topics')navigate('topics');
+  if(act==='go-settings')navigate('settings');
   if(act==='library-filter'){libraryFilter=button.dataset.filter;render();}
-  if(act==='new-topic')openTopicModal();
-  if(act==='edit-topic')openTopicModal(id);
+  if(act==='new-topic'){topicEditorId='';render();el('topic-name')?.focus();}
+  if(act==='edit-topic'){topicEditorId=id;render();el('topic-name')?.focus();}
+  if(act==='cancel-topic-edit'){topicEditorId='';render();}
+  if(act==='sync-zotero')syncZoteroLibrary().catch(error=>showToast(error.message));
   if(act==='delete-topic'){
     const t=topicById(id);
-    if(t&&confirm('Supprimer la thématique « '+t.name+' » ?')){state.topics=state.topics.filter(x=>x.id!==id);saveAndRender();}
+    if(t&&confirm('Supprimer la thématique « '+t.name+' » ?')){
+      state.topics=state.topics.filter(x=>x.id!==id);
+      if(topicEditorId===id)topicEditorId='';
+      state.alerts={lastCheck:null,known:[],unseen:[]};
+      saveAndRender();
+    }
   }
   if(act==='close-modal')el('modal-layer')?.remove();
   if(act==='remove-library'){delete state.library[id];saveAndRender();}
@@ -427,11 +485,19 @@ document.addEventListener('submit',event=>{
   const form=event.target;
   if(form.id==='session-form')startSession(form);
   if(form.id==='topic-form'){
-    const name=form.elements.name.value.trim(),query=form.elements.query.value.trim(),id=form.elements.id.value;
+    const fd=new FormData(form);
+    const name=String(fd.get('topicName')||'').trim();
+    const query=String(fd.get('topicQuery')||'').trim();
+    const id=String(fd.get('topicId')||'');
     if(!name||!query){showToast('Nom et mots-clés obligatoires.');return;}
-    if(id){const t=topicById(id);if(t){t.name=name;t.query=query;}}
-    else state.topics.push({id:uid(),name,query});
-    el('modal-layer')?.remove();saveAndRender();
+    if(id){
+      const topic=topicById(id);
+      if(!topic){showToast('Thématique introuvable.');return;}
+      topic.name=name;topic.query=query;
+    }else state.topics.push({id:uid(),name,query});
+    topicEditorId='';
+    state.alerts={lastCheck:null,known:[],unseen:[]};
+    saveAndRender();showToast('Thématique enregistrée : '+name);
   }
   if(form.id==='settings-form'){
     state.prefs.zoteroUser=form.elements.zoteroUser.value.trim();
