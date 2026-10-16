@@ -20,6 +20,8 @@ Swipaper est une application de veille scientifique qui permet de découvrir des
 - Swipe à gauche pour écarter un article.
 - Mise de côté d'un article à examiner ultérieurement.
 - Navigation tactile, par boutons ou avec le clavier.
+- Interface vert forêt et crème, inspirée des applications de rencontre et adaptée à la recherche scientifique.
+- Sur ordinateur : recherche et filtres à gauche, cartes de publications à droite ; sur mobile : cartes de swipe en priorité.
 - Annulation de la dernière décision.
 - Animation d’une girafe au long cou qui accompagne les swipes vers la gauche ou vers la droite.
 - Sessions configurables et reprise d'une session interrompue.

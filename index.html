@@ -1,47 +1,34 @@
-<!doctype html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#fff7f6">
-<meta name="description" content="Swipaper — Découvrez, sélectionnez et organisez la littérature scientifique.">
-<link rel="manifest" href="./manifest.webmanifest">
-<link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-<link rel="stylesheet" href="./styles.css">
-<title>Swipaper — Research discovery</title>
-</head>
-<body>
+<!doctype html><html lang="fr"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#fffaf6"><meta name="description" content="Swipaper — Découvrez les publications qui correspondent vraiment à votre recherche.">
+<link rel="icon" type="image/svg+xml" href="./assets/icon.svg"><link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./styles.css">
+<title>Swipaper — Love at first abstract</title></head><body>
 <div id="app" class="app-shell">
 <aside class="sidebar">
-  <a class="brand" href="./" aria-label="Swipaper, accueil"><img class="brand-logo-img" src="./assets/icon.svg" alt="" width="54" height="54"><span>swipaper<small>LOVE AT FIRST ABSTRACT</small></span></a>
-  <p class="side-label">ESPACE DE TRAVAIL</p>
+  <a href="./" class="brand" aria-label="Swipaper, accueil"><img class="brand-logo-img" src="./assets/icon.svg" alt="" width="53" height="53"><span class="brand-wordmark">swipaper<small>LOVE AT FIRST ABSTRACT ♡</small></span></a>
+  <p class="side-label">VOTRE ESPACE</p>
   <nav class="side-nav" aria-label="Navigation principale">
-    <button class="nav-item active" data-view="discover"><span class="nav-icon">◈</span> Découvrir</button>
-    <button class="nav-item" data-view="library"><span class="nav-icon">▤</span> Bibliothèque <span class="count" id="saved-count">0</span></button>
-    <button class="nav-item" data-view="topics"><span class="nav-icon">◎</span> Mes thématiques</button>
-    <button class="nav-item" data-view="history"><span class="nav-icon">◷</span> Historique</button>
+    <button class="nav-item active" data-view="discover"><span class="nav-icon">◈</span><span>Découvrir</span></button>
+    <button class="nav-item" data-view="topics"><span class="nav-icon">⌕</span><span>Thématiques</span></button>
+    <button class="nav-item" data-view="library"><span class="nav-icon">▤</span><span>Bibliothèque</span><span class="count" id="saved-count">0</span></button>
+    <button class="nav-item" data-view="history"><span class="nav-icon">◷</span><span>Historique</span></button>
+    <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span><span>Paramètres</span></button>
   </nav>
-  <div class="sidebar-bottom">
-    <div class="side-note"><span class="orb"></span><div><strong>Votre veille, à votre rythme.</strong><p>Des publications réelles, sélectionnées par vous.</p></div></div>
-    <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span> Paramètres</button>
-  </div>
+  <div class="sidebar-bottom"><div class="sidebar-illustration"><img src="./assets/icon.svg" alt="" width="72" height="72"><p>La science est plus belle quand on la découvre ensemble. ♡</p></div><p class="sidebar-footnote">Des idées fraîches. Pas de doublons.</p></div>
 </aside>
 <div class="main-area">
   <header class="topbar">
-    <div class="breadcrumbs">Votre espace <span> / </span><strong id="breadcrumb">Découvrir</strong></div>
-    <div class="top-actions"><span class="online-dot" id="online-dot"></span><span id="online-label">En ligne</span><button class="install-button" id="install-button" hidden>Installer l'app</button></div>
+    <div class="breadcrumbs"><span id="breadcrumb">Découvrir</span><span class="tiny" aria-hidden="true"> ✧ vos découvertes scientifiques</span></div>
+    <div class="top-actions"><span class="online-dot" id="online-dot"></span><span id="online-label">En ligne</span><button class="install-button" id="install-button" hidden>Installer l’app</button></div>
   </header>
-  <main id="view" tabindex="-1"><p class="muted">Chargement de Swipaper…</p></main>
+  <main id="view" tabindex="-1"><div class="loading-placeholder">Préparation de votre espace de recherche…</div></main>
 </div>
 <nav class="mobile-nav" aria-label="Navigation mobile">
   <button data-view="discover" class="active"><span>◈</span><small>Découvrir</small></button>
+  <button data-view="topics"><span>⌕</span><small>Thèmes</small></button>
   <button data-view="library"><span>▤</span><small>Articles</small></button>
-  <button data-view="topics"><span>◎</span><small>Thèmes</small></button>
   <button data-view="history"><span>◷</span><small>Sessions</small></button>
   <button data-view="settings"><span>⚙</span><small>Réglages</small></button>
 </nav>
-</div>
-<div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
-<script type="module" src="./src/app.js"></script>
-</body>
-</html>
+</div><div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
+<script type="module" src="./src/app.js"></script></body></html>
