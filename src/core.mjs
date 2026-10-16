@@ -135,6 +135,35 @@ export function europePmcUrl(query,{cutoff='',page=1,pageSize=50}={}) {
   url.searchParams.set('page',String(Math.max(1,page)));
   return url.toString();
 }
+export function risFingerprints(source) {
+  const rows=String(source||'').replace(/^\uFEFF/,'').split(/\r?\n/);
+  const keys=new Set();
+  let item={},count=0,last='';
+  function finish() {
+    if(!item.title&&!item.DOI&&!item.url){item={};last='';return;}
+    const f=fingerprints(item);
+    if(f.length){count++;for(const key of f)keys.add(key);}
+    item={};last='';
+  }
+  for(const line of rows){
+    const match=line.match(/^([A-Z0-9]{2})\s+-\s*(.*)$/);
+    if(!match){
+      if(last&&line.trim())item[last]=(item[last]||'')+' '+line.trim();
+      continue;
+    }
+    const field=match[1],value=match[2].trim();
+    if(field==='TY'){if(Object.keys(item).length)finish();continue;}
+    if(field==='ER'){finish();continue;}
+    if(field==='DO')item.DOI=value;
+    if(field==='TI'||field==='T1')item.title=value;
+    if(field==='UR')item.url=value;
+    if(field==='N1'&&/PMID\s*:/i.test(value))item.extra=value;
+    if(field==='AN'&&/^\d{3,12}$/.test(value))item.pmid=value;
+    last=field==='TI'||field==='T1'?'title':field==='DO'?'DOI':field==='UR'?'url':'';
+  }
+  if(Object.keys(item).length)finish();
+  return {keys:[...keys],count};
+}
 const risText=value=>String(value||'').replace(/[\r\n]+/g,' ').trim();
 export function asRIS(items) {
   return items.map(a=>['TY  - JOUR','TI  - '+risText(a.title),...a.authors.map(x=>'AU  - '+risText(x)),
