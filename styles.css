@@ -113,3 +113,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .network-loading img{display:block;margin:auto}
 @media(max-width:950px){.citation-layout{grid-template-columns:1fr}.citation-details{max-width:700px}}
 @media(max-width:720px){.advanced-filters>summary{display:block}.advanced-filters>summary span{display:block;margin:6px 0 0}.citation-canvas{padding:8px}.citation-svg{min-height:230px}.citation-details{padding:17px}.research-tools .btn{flex-basis:100%}.finish-giraffe{width:80px;height:80px}}
+
+.search-error{padding:13px 16px;border:1px solid #f0c7c1;border-radius:12px;background:#fff7f4;color:#a14f44;margin:10px 0 17px;font-size:12px}
+.search-error strong{display:block;font-weight:800;margin-bottom:5px}
+.search-error p{line-height:1.6;margin:0}

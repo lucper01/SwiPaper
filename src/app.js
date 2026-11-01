@@ -24,6 +24,7 @@ let toastTimer;
 let installing=null;
 let swipeAnimationLocked=false;
 let mobileFiltersOpen=false;
+let searchError='';
 let graphState={loading:false,data:null,error:'',selected:null,article:null};
 const root=document.querySelector('#view');
 const toastBox=document.querySelector('#toast');
@@ -118,6 +119,7 @@ function researchForm(){
   const kinds=Array.isArray(prefs.types)?prefs.types:['article','review','preprint'];
   const topics=state.topics.map(t=>'<label class="check-chip"><input type="checkbox" name="topic" value="'+esc(t.id)+'" '+(selectedTopics.includes(t.id)?'checked':'')+'><span>'+esc(t.name)+'</span></label>').join('');
   return '<section class="research-panel" aria-label="Recherche scientifique"><div class="pane-title-row"><h2>Rechercher des articles</h2><span class="meta-hint">Recherche</span></div>'+
+    (searchError?'<div class="search-error" role="alert"><strong>Recherche non aboutie</strong><p>'+esc(searchError)+'</p></div>':'')+
   '<form id="session-form" class="form-stack">'+
   '<div class="field"><label for="quick-query">Mots-clés</label><div class="query-editor"><textarea id="quick-query" name="quickQuery" rows="2" maxlength="400" spellcheck="false" placeholder="Ex. olfactory perception, visual attention" aria-describedby="quick-feedback">'+esc(prefs.quickQuery||'')+'</textarea>'+
   '<button class="query-submit" type="submit" aria-label="Lancer la recherche" '+(loading?'disabled':'')+'>⌕</button></div><div id="quick-feedback" class="search-feedback" role="status" aria-live="polite"></div>'+
@@ -354,6 +356,7 @@ async function fetchSource(topic,source,cutoff,page,key,kinds=['article','review
 }
 async function startSession(form){
   if(loading)return;
+  searchError='';
   const fd=new FormData(form);
   const ids=fd.getAll('topic');
   const sources=fd.getAll('source').filter(v=>['openalex','pubmed','scholar'].includes(v));
@@ -418,7 +421,7 @@ async function startSession(form){
     state.active={id:uid(),started:new Date().toISOString(),articles:merged,index:0,actions:[],cutoff,sources,query:quickQuery};mobileFiltersOpen=false;
     state.lastSummary=null;persist();
     if(errors.length)showToast('Résultats partiels : '+errors[0]);
-  }catch(error){showToast('Recherche impossible : '+error.message);}
+  }catch(error){searchError=error.message;showToast('Recherche impossible : '+error.message);}
   finally{loading=false;render();}
 }
 function attachSwipe(){
