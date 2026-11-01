@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {abstractFromIndex,cleanDoi,safeUrl,toArticle,toEuropePMCArticle,deduplicate,asRIS,asCSV,zoteroItem,openAlexUrl,europePmcUrl,cutoffFromPeriod,fingerprints,zoteroFingerprints,isFresh,normalizeTitle,risFingerprints,resetLocalLibraryState} from '../src/core.mjs';
+import {abstractFromIndex,cleanDoi,safeUrl,toArticle,toEuropePMCArticle,deduplicate,asRIS,asCSV,zoteroItem,openAlexUrl,europePmcUrl,cutoffFromPeriod,fingerprints,zoteroFingerprints,isFresh,normalizeTitle,risFingerprints,resetLocalLibraryState,completeSourcePage} from '../src/core.mjs';
 test('reconstruct abstract',()=>{assert.equal(abstractFromIndex({world:[1],hello:[0]}),'hello world');assert.equal(abstractFromIndex(null),'');});
 test('identifiers and URL sanitizing',()=>{assert.equal(cleanDoi('https://doi.org/10.1234/ABC'),'10.1234/ABC');assert.equal(safeUrl('javascript:alert(1)'),'');});
 test('publication period using calendar days, months and years',()=>{
@@ -84,4 +84,15 @@ test('Resetting the local library leaves Zotero, topics and decisions untouched 
   assert.deepEqual(all.prefs,input.prefs);
   assert.deepEqual(all.externalIndex,input.externalIndex);
   assert.deepEqual(all.zoteroIndex,input.zoteroIndex);
+});
+
+test('Pagination continues when a full provider page has few locally relevant records',()=>{
+  const raw=Array.from({length:75},(_,i)=>({id:i}));
+  const matches=[{id:'paper-1',title:'Strict match'}];
+  const page=completeSourcePage(raw,matches,75);
+  assert.equal(page.rawCount,75);
+  assert.equal(page.articles.length,1);
+  assert.equal(page.hasMore,true);
+  assert.equal(completeSourcePage(raw.slice(0,12),[],75).hasMore,false);
+  assert.equal(completeSourcePage([],[],75).hasMore,false);
 });

@@ -9,6 +9,11 @@ export function resetLocalLibraryState(current, forgetProcessed=false) {
   }
   return updated;
 }
+// Pagination depends on the unfiltered API page, never on how many records pass local relevance checks.
+export function completeSourcePage(rawRecords, matchingArticles, requestedSize=75) {
+  const rawCount=Array.isArray(rawRecords)?rawRecords.length:0;
+  return {articles:matchingArticles,rawCount,hasMore:rawCount>=requestedSize};
+}
 export function abstractFromIndex(index) {
   if (!index || typeof index !== 'object') return '';
   const words=[];

@@ -1,4 +1,4 @@
-import { toArticle, toEuropePMCArticle, deduplicate, openAlexUrl, europePmcUrl, cutoffFromPeriod, fingerprints, zoteroFingerprints, isFresh, asRIS, asCSV, risFingerprints, zoteroItem, resetLocalLibraryState } from './core.mjs';
+import { toArticle, toEuropePMCArticle, deduplicate, openAlexUrl, europePmcUrl, cutoffFromPeriod, fingerprints, zoteroFingerprints, isFresh, asRIS, asCSV, risFingerprints, zoteroItem, resetLocalLibraryState, completeSourcePage } from './core.mjs';
 import { parseScientificQuery, compileScientificQuery, evaluateScientificArticle, themeScope } from './search.mjs';
 
 const STORAGE='swipaper-v1-state';
@@ -300,21 +300,23 @@ async function fetchSource(topic,source,cutoff,page,key,kinds=['article','review
   const response=await fetch(url,{headers:{Accept:'application/json'}});
   if(!response.ok)throw new Error((isPubmed?'Europe PMC':'OpenAlex')+' HTTP '+response.status);
   const data=await response.json();
-  const records=isPubmed?(data.resultList?.result||[]).map(w=>{
+  const rawRecords=isPubmed?(data.resultList?.result||[]):(data.results||[]);
+  const records=isPubmed?rawRecords.map(w=>{
       const a=toEuropePMCArticle(w,topic.name);
       const publicationTypes=(w.pubTypeList?.pubType||[]).join(' ').toLowerCase();
       const kind=w.source==='PPR'?'preprint':/review|meta.analysis|systematic/.test(publicationTypes)?'review':'article';
       return {...a,kind};
-    }):(data.results||[]).map(w=>{
+    }):rawRecords.map(w=>{
       const a=toArticle(w,topic.name);
       const classification=String(w.type||w.type_crossref||'').toLowerCase();
       const kind=/preprint|posted.content/.test(classification)?'preprint':/review|meta.analysis/.test(classification)?'review':'article';
       return {...a,kind};
     });
-  return records.filter(a=>a.abstract.length>35&&a.date&&a.url&&kinds.includes(a.kind)).flatMap(a=>{
+  const matching=records.filter(a=>a.abstract.length>35&&a.date&&a.url&&kinds.includes(a.kind)).flatMap(a=>{
     const assessment=evaluateScientificArticle(a,parsed,scope);
     return assessment.matches?[{...a,relevanceScore:assessment.score,matchingTerms:assessment.matched,titleTerms:assessment.titleMatched,scope}]:[];
   });
+  return completeSourcePage(rawRecords,matching,75);
 }
 async function startSession(form){
   if(loading)return;
@@ -362,8 +364,8 @@ async function startSession(form){
           errors.push(active[i].topic.name+' / '+active[i].source+' : '+(result.reason?.message||'Erreur réseau'));
           active[i].exhausted=true;
         }else{
-          active[i].articles.push(...result.value);
-          if(result.value.length<10)active[i].exhausted=true;
+          active[i].articles.push(...result.value.articles);
+          if(!result.value.hasMore)active[i].exhausted=true;
         }
       });
       const fresh=deduplicate(pools.flatMap(p=>p.articles).sort((a,b)=>b.date.localeCompare(a.date)||b.relevanceScore-a.relevanceScore))
@@ -426,7 +428,7 @@ async function checkNewPapers(manual=false) {
     if(!valid.length)throw new Error('Sources indisponibles ou accès bloqué.');
     const fromLibrary=localFingerprints();
     const zotero=[...(state.prefs.zoteroUser?state.zoteroIndex.keys:[]),...(state.externalIndex?.keys||[])];
-    const found=deduplicate(valid.flatMap(r=>r.value).sort((a,b)=>b.date.localeCompare(a.date)||b.relevanceScore-a.relevanceScore))
+    const found=deduplicate(valid.flatMap(r=>r.value.articles).sort((a,b)=>b.date.localeCompare(a.date)||b.relevanceScore-a.relevanceScore))
       .filter(a=>isFresh(a,{cutoff,seen:fromLibrary,zotero}));
     const known=new Set(state.alerts.known||[]);
     const first=!state.alerts.lastCheck;
