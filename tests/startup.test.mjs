@@ -97,3 +97,14 @@ test('Tablet media query returns to natural scrolling rather than clipping stack
  assert.match(css,/@media\(min-width:721px\) and \(max-width:900px\)/);
  assert.match(css,/#view\.session-layout\s*\{\s*height:auto;/);
 });
+
+test('Background updates do not erase a partially entered search query',()=>{
+ const {context,registry}=startApp();
+ registry.get('view').innerHTML='User still editing the form';
+ registry.set('quick-query',{value:'new unsaved keywords'});
+ vm.runInContext("state.prefs.quickQuery='old keywords';refreshAfterBackgroundUpdate();",context);
+ assert.equal(registry.get('view').innerHTML,'User still editing the form');
+ registry.get('quick-query').value='old keywords';
+ vm.runInContext('refreshAfterBackgroundUpdate();',context);
+ assert.match(registry.get('view').innerHTML,/session-form/);
+});

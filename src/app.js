@@ -86,6 +86,12 @@ function counts(actions=[]){
   return {liked:actions.filter(x=>x.decision==='liked').length,later:actions.filter(x=>x.decision==='later').length,rejected:actions.filter(x=>x.decision==='rejected').length};
 }
 function saveAndRender(){persist();render();}
+// Automatic citation and alert updates must never discard a search the user is typing.
+function refreshAfterBackgroundUpdate(){
+  const input=el('quick-query');
+  if(view==='discover'&&input&&input.value!==String(state.prefs.quickQuery||''))return;
+  render();
+}
 function render(){
   el('breadcrumb').textContent=TITLES[view];
   document.querySelectorAll('[data-view]').forEach(node=>node.classList.toggle('active',node.dataset.view===view));
@@ -328,7 +334,7 @@ async function syncZoteroLibrary({silent=false}={}){
     state.zoteroIndex={user,keys:[...keys],count,syncedAt:new Date().toISOString()};
     persist();
     if(!silent)showToast(count+' références Zotero synchronisées. Les articles correspondants seront ignorés.');
-  }finally{syncingZotero=false;render();}
+  }finally{syncingZotero=false;refreshAfterBackgroundUpdate();}
 }
 
 function localFingerprints() {
@@ -525,7 +531,7 @@ async function checkNewPapers(manual=false) {
     if(manual)showToast(first?'Veille initialisée sur les sources disponibles.':fresh.length+' nouvelle(s) publication(s) repérée(s).');
     if(valid.length<results.length)showToast('Veille partielle : certaines sources sont indisponibles et seront réessayées.');
   }catch(error){if(manual)showToast('Veille indisponible : '+error.message);}
-  finally{alertLoading=false;render();}
+  finally{alertLoading=false;refreshAfterBackgroundUpdate();}
 }
 function renderTopics(){
   const editing=topicById(topicEditorId)||{id:'',name:'',query:'',scope:'title_abstract'};
