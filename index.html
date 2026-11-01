@@ -32,4 +32,49 @@
   <button data-view="settings"><span>⚙</span><small>Réglages</small></button>
 </nav>
 </div><div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
-<script type="module" src="./src/app.js"></script></body></html>
+<script>
+(function(){
+  var recovered=false;
+  var reason='';
+  function displayFailure(){
+    var view=document.getElementById('view');
+    if(!view||!view.querySelector('.loading-placeholder')||recovered)return;
+    recovered=true;
+    view.innerHTML='<section class="panel" style="max-width:570px;margin:40px auto;padding:28px">'+
+    '<h1 style="font-size:23px;margin:0 0 12px;color:#205b43">Impossible de charger Swipaper</h1>'+
+    '<p style="color:#536f5f;line-height:1.7">Un fichier de l’application n’a pas pu être chargé. Vos articles et paramètres sont conservés.</p>'+
+    '<div class="button-row"><button type="button" id="retry-swipaper" class="btn">Réessayer</button>'+
+    '<button type="button" id="refresh-swipaper" class="btn secondary">Actualiser l’application</button></div>'+
+    '<p id="swipaper-startup-diagnostic" style="margin-top:16px;font-size:11px;color:#789080"></p></section>';
+    var diag=document.getElementById('swipaper-startup-diagnostic');
+    if(diag)diag.textContent=reason?'Information technique : '+reason:'';
+    var retry=document.getElementById('retry-swipaper');
+    if(retry)retry.addEventListener('click',function(){location.reload()});
+    var refresh=document.getElementById('refresh-swipaper');
+    if(refresh)refresh.addEventListener('click',async function(){
+      refresh.disabled=true;
+      try{
+        if('serviceWorker' in navigator){
+          var regs=await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.filter(function(reg){return reg.scope.includes('/SwiPaper/')}).map(function(reg){return reg.unregister()}));
+        }
+        if('caches' in window){
+          var keys=await caches.keys();
+          await Promise.all(keys.filter(function(key){return key.indexOf('swipaper-')===0}).map(function(key){return caches.delete(key)}));
+        }
+      }catch(e){console.warn('PWA refresh failed',e)}
+      location.replace(location.pathname+'?fresh='+Date.now()+location.hash);
+    });
+  }
+  window.addEventListener('error',function(e){
+    reason=e.message||'Erreur de chargement du module';
+    setTimeout(displayFailure,100);
+  },true);
+  window.addEventListener('unhandledrejection',function(e){
+    reason=String(e.reason&&e.reason.message||e.reason||'Promesse rejetée');
+    setTimeout(displayFailure,100);
+  });
+  setTimeout(displayFailure,4500);
+})();
+</script>
+<script type="module" src="./src/app.js?v=20261101-recovery"></script></body></html>
