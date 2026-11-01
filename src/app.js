@@ -8,7 +8,7 @@ const DEFAULT={
   library:{},seen:{},history:[],active:null,lastSummary:null,alerts:{lastCheck:null,known:[],unseen:[]},
   zoteroIndex:{user:'',syncedAt:null,keys:[],count:0},
   externalIndex:{importedAt:null,keys:[],count:0},
-  prefs:{periodCount:30,periodUnit:'months',sources:['openalex','pubmed'],batch:20,zoteroUser:'',zoteroCollection:'',quickQuery:'',searchScope:'title_abstract',types:['article','review','preprint']}
+  prefs:{periodCount:3,periodUnit:'months',sources:['openalex','pubmed'],batch:20,zoteroUser:'',zoteroCollection:'',quickQuery:'',searchScope:'title_abstract',selectedTopicIds:[],types:['article','review','preprint']}
 };
 let state=loadState();
 if(!state.alerts||!Array.isArray(state.alerts.known))state.alerts={lastCheck:null,known:[],unseen:[]};
@@ -108,44 +108,48 @@ function updateQuickQueryFeedback(){
 
 function researchForm(){
   const prefs=state.prefs;
-  const sourceList=Array.isArray(prefs.sources)?prefs.sources:['openalex','pubmed'];
-  const typeList=Array.isArray(prefs.types)?prefs.types:['article','review','preprint'];
-  const query=String(prefs.quickQuery||'');
-  const topics=state.topics.map(t=>'<label class="check-chip"><input type="checkbox" name="topic" value="'+esc(t.id)+'"><span>'+esc(t.name)+'</span></label>').join('');
-  return '<section class="research-panel"><div class="pane-title-row"><h2>Recherche d’articles</h2><span class="meta-hint">✧ Filtres scientifiques</span></div>'+
-  '<p class="muted tiny" style="line-height:1.65;margin:0 0 14px">Une recherche booléenne rigoureuse pour des articles qui correspondent réellement à vos critères.</p>'+
-  '<div class="research-form-body"><form id="session-form" class="form-stack">'+
-  '<div class="field"><label for="quick-query">MOTS-CLÉS ET REQUÊTE BOOLÉENNE</label>'+
-  '<div class="query-editor"><textarea id="quick-query" name="quickQuery" maxlength="400" rows="2" placeholder="(olfaction OR odor) AND (attention OR perception) NOT review" spellcheck="false">'+esc(query)+'</textarea><button class="query-submit" type="submit" aria-label="Lancer la recherche" '+(loading?'disabled':'')+'>⌕</button></div>'+
-  '<div class="query-tools">'+['AND','OR','NOT','(',')','"phrase"'].map(t=>'<button type="button" class="query-token" data-act="insert-token" data-token="'+esc(t)+'">'+esc(t)+'</button>').join('')+'</div>'+
-  '<div id="quick-feedback" class="search-feedback" role="status" aria-live="polite">Les critères doivent être reliés par AND / OR / NOT.</div>'+
-  '<small>Sans opérateur : tous les mots doivent être présents. Une expression entre guillemets est recherchée telle quelle.</small></div>'+
-  '<div class="field"><label>THÉMATIQUES ENREGISTRÉES (FACULTATIF)</label>'+
-  '<div class="check-list">'+(topics||'<span class="tiny muted">Aucune thématique préchargée.</span>')+'</div>'+
-  '<small>Si vous cochez un thème et saisissez une requête, les deux conditions seront réunies par AND. <button type="button" data-act="go-topics" class="text-btn">Gérer mes thématiques ↗</button></small></div>'+
-  '<div class="filter-heading">◫ Filtres de recherche</div><div class="filter-grid">'+
-  '<div class="form-section"><h3>◷ Période de publication</h3><div class="field"><label for="period-count">Publié depuis moins de</label><div class="form-row" style="grid-template-columns:1fr 1.3fr;gap:7px"><input id="period-count" name="periodCount" type="number" min="1" max="3650" value="'+esc(prefs.periodCount||30)+'" required>'+
-  '<select name="periodUnit" aria-label="Unité de période">'+[['days','jours'],['months','mois'],['years','années']].map(([v,t])=>'<option value="'+v+'" '+(prefs.periodUnit===v?'selected':'')+'>'+t+'</option>').join('')+'</select></div></div></div>'+
-  '<div class="form-section"><h3>◎ Zone de recherche</h3><label class="article-type-check"><input type="radio" name="searchScope" value="title" '+(prefs.searchScope==='title'?'checked':'')+'> Titre uniquement</label><label class="article-type-check"><input type="radio" name="searchScope" value="title_abstract" '+(prefs.searchScope!=='title'?'checked':'')+'> Titre + résumé</label></div>'+
-  '<div class="form-section"><h3>▤ Sources scientifiques</h3><div class="source-options"><label class="source-switch"><input type="checkbox" name="source" value="pubmed" '+(sourceList.includes('pubmed')?'checked':'')+'> PubMed / Europe PMC</label><label class="source-switch"><input type="checkbox" name="source" value="openalex" '+(sourceList.includes('openalex')?'checked':'')+'> OpenAlex</label></div>'+
-  '<small style="display:block;margin-top:11px">Google Scholar : <a href="https://scholar.google.com/" target="_blank" rel="noopener noreferrer">recherche externe ↗</a> (pas de collecte automatique).</small></div>'+
-  '<div class="form-section"><h3>▧ Types de publication</h3><label class="article-type-check"><input type="checkbox" name="kind" value="article" '+(typeList.includes('article')?'checked':'')+'> Articles scientifiques</label><label class="article-type-check"><input type="checkbox" name="kind" value="review" '+(typeList.includes('review')?'checked':'')+'> Revues et méta-analyses</label><label class="article-type-check"><input type="checkbox" name="kind" value="preprint" '+(typeList.includes('preprint')?'checked':'')+'> Prépublications</label></div></div>'+
-  '<div class="field"><label for="batch-size">TAILLE DE LA SESSION</label><select id="batch-size" name="batch">'+[10,20,30,50].map(n=>'<option value="'+n+'" '+(prefs.batch===n?'selected':'')+'>'+n+' publications</option>').join('')+'</select></div>'+
-  '<button class="btn search-cta" type="submit" '+(loading?'disabled':'')+'>'+(loading?'<span class="loading"></span> Recherche et dédoublonnage en cours…':'⌕  Lancer la recherche')+'</button>'+
-  '<div class="search-meta-row"><span>Sans doublons · Articles récents</span><button type="button" data-act="clear-quick-search" class="text-btn">Réinitialiser les filtres</button></div>'+
-  '<div class="pill-note" style="margin-top:8px">'+(prefs.zoteroUser?'Zotero lié : références déjà connues exclues après synchronisation.':'Zotero non lié · <button type="button" class="text-btn" data-act="go-settings">Connecter ma bibliothèque ↗</button>')+'</div>'+
-  '</form></div></section>';
+  const selectedTopics=Array.isArray(prefs.selectedTopicIds)?prefs.selectedTopicIds:[];
+  const sources=Array.isArray(prefs.sources)?prefs.sources:['openalex','pubmed'];
+  const kinds=Array.isArray(prefs.types)?prefs.types:['article','review','preprint'];
+  const topics=state.topics.map(t=>'<label class="check-chip"><input type="checkbox" name="topic" value="'+esc(t.id)+'" '+(selectedTopics.includes(t.id)?'checked':'')+'><span>'+esc(t.name)+'</span></label>').join('');
+  return '<section class="research-panel" aria-label="Recherche scientifique"><div class="pane-title-row"><h2>Rechercher des articles</h2><span class="meta-hint">Recherche</span></div>'+
+  '<form id="session-form" class="form-stack">'+
+  '<div class="field"><label for="quick-query">Mots-clés</label><div class="query-editor"><textarea id="quick-query" name="quickQuery" rows="2" maxlength="400" spellcheck="false" placeholder="Ex. olfactory perception, visual attention" aria-describedby="quick-feedback">'+esc(prefs.quickQuery||'')+'</textarea>'+
+  '<button class="query-submit" type="submit" aria-label="Lancer la recherche" '+(loading?'disabled':'')+'>⌕</button></div><div id="quick-feedback" class="search-feedback" role="status" aria-live="polite"></div>'+
+  '<div class="starter-examples"><span>Exemples</span>'+[['olfactory perception','Olfaction'],['visual attention','Attention'],['working memory','Mémoire']].map(([query,label])=>'<button type="button" class="example-chip" data-act="try-example" data-query="'+esc(query)+'">'+esc(label)+'</button>').join('')+'</div></div>'+
+  (state.topics.length?'<div class="field"><label>Thématiques enregistrées (facultatif)</label><div class="check-list">'+topics+'</div>'+
+   '<small>Une requête saisie s’ajoute aux thématiques sélectionnées.</small></div>':
+   '<p class="tiny muted intro-hint">Vous pouvez chercher sans créer de thématique. <button type="button" data-act="go-topics" class="text-btn">Enregistrer une thématique</button></p>')+
+  '<div class="form-row simple-options"><div class="field"><label for="period-count">Publiés depuis moins de</label><div class="form-row" style="grid-template-columns:1fr 1.25fr;gap:7px">'+
+  '<input id="period-count" name="periodCount" type="number" min="1" max="3650" required value="'+esc(prefs.periodCount||3)+'">'+
+  '<select name="periodUnit" aria-label="Unité de période">'+[['days','jours'],['months','mois'],['years','années']].map(([v,t])=>'<option value="'+v+'" '+(prefs.periodUnit===v?'selected':'')+'>'+t+'</option>').join('')+'</select></div></div>'+
+  '<div class="field"><label for="batch-size">Articles par session</label><select id="batch-size" name="batch">'+[10,20,30,50].map(n=>'<option value="'+n+'" '+(prefs.batch===n?'selected':'')+'>'+n+' publications</option>').join('')+'</select></div></div>'+
+  '<button class="btn search-cta" type="submit" '+(loading?'disabled':'')+'>'+(loading?'<span class="loading"></span> Recherche en cours…':'Rechercher les articles')+'</button>'+
+  '<details class="advanced-filters"><summary>Affiner la recherche <span>Sources, opérateurs logiques et types d’articles</span></summary>'+
+  '<div class="advanced-filters-inner"><div class="field"><label>Opérateurs booléens</label><div class="query-tools">'+['AND','OR','NOT','(',')','"phrase"'].map(t=>'<button type="button" class="query-token" data-act="insert-token" data-token="'+esc(t)+'">'+esc(t)+'</button>').join('')+'</div>'+
+  '<small>Sans opérateur, tous les mots sont requis. AND = ensemble, OR = alternative, NOT = exclusion, "..." = expression exacte.</small></div>'+
+  '<div class="form-section"><h3>Zone de recherche</h3><label class="article-type-check"><input type="radio" name="searchScope" value="title_abstract" '+(prefs.searchScope!=='title'?'checked':'')+'> Titre et résumé</label><label class="article-type-check"><input type="radio" name="searchScope" value="title" '+(prefs.searchScope==='title'?'checked':'')+'> Titre uniquement</label></div>'+
+  '<div class="form-section"><h3>Bases bibliographiques</h3><div class="source-options"><label class="source-switch"><input type="checkbox" name="source" value="openalex" '+(sources.includes('openalex')?'checked':'')+'> OpenAlex</label><label class="source-switch"><input type="checkbox" name="source" value="pubmed" '+(sources.includes('pubmed')?'checked':'')+'> PubMed / Europe PMC</label></div></div>'+
+  '<div class="form-section"><h3>Types de publication</h3><label class="article-type-check"><input type="checkbox" name="kind" value="article" '+(kinds.includes('article')?'checked':'')+'> Articles</label><label class="article-type-check"><input type="checkbox" name="kind" value="review" '+(kinds.includes('review')?'checked':'')+'> Revues / méta-analyses</label><label class="article-type-check"><input type="checkbox" name="kind" value="preprint" '+(kinds.includes('preprint')?'checked':'')+'> Prépublications</label></div>'+
+  '<p class="tiny muted">Les critères sont vérifiés sur chaque article avant qu’il soit proposé.</p></div></details>'+
+  '<div class="button-row research-tools">'+
+  '<button type="button" class="btn secondary small" data-act="scholar-search">Rechercher dans Google Scholar ↗</button>'+
+  '<button type="button" class="btn secondary small" data-act="scholar-import">Importer une sélection Scholar</button></div>'+
+  '<div class="search-meta-row"><span>Les articles déjà traités sont exclus.</span><button type="button" data-act="clear-quick-search" class="text-btn">Effacer les filtres</button></div>'+
+  (prefs.zoteroUser?'<p class="tiny muted">Zotero lié : comparaison avant chaque recherche.</p>':'<p class="tiny muted">Pour exclure les articles de Zotero, <button type="button" data-act="go-settings" class="text-btn">connectez votre bibliothèque</button>.</p>')+
+  '</form></section>';
 }
 function discoveryHero(){
-  return '<div class="discover-hero"><p class="eyebrow">SWIPEZ · EXPLOREZ · DÉCOUVREZ</p><h1>Des découvertes scientifiques qui vous correspondent vraiment.</h1><p>Une recherche rigoureuse, puis le plaisir de choisir. Love at first abstract ♡</p></div>';
+  return '<div class="discover-hero"><p class="eyebrow">RECHERCHE SCIENTIFIQUE</p><h1>Rechercher et sélectionner des publications</h1>'+
+  '<p>Précisez vos sujets, consultez les résumés et classez les articles selon leur pertinence.</p></div>';
 }
 function setup(){
   const news=(state.alerts?.unseen||[]).length;
   return discoveryHero()+
   '<div class="discover-workspace">'+researchForm()+
   '<section class="result-panel"><div class="pane-title-row"><h2>Votre prochaine découverte</h2><span class="meta-hint">✧ À vous de swiper</span></div>'+
-  '<div class="preview-placeholder"><img src="./assets/icon.svg" alt="Girafe Swipaper avec un article scientifique">'+
-  '<h3>Rencontrez votre prochain article coup de cœur</h3><p>Indiquez vos mots-clés, choisissez votre période et lancez la recherche. Les premiers papiers pertinents apparaîtront ici.</p>'+
+  '<div class="preview-placeholder"><img src="./assets/giraffe-discover.svg" alt="Girafe avec une loupe">'+
+  '<h3>Les articles apparaîtront ici</h3><p>Saisissez vos mots-clés, choisissez une période et lancez la recherche.</p>'+
   '<button class="btn secondary small" data-act="go-topics" type="button">⌕ Mes thématiques</button></div>'+
   (news?'<div class="pill-note" style="margin-top:12px">✧ '+news+' nouvelle(s) publication(s) détectée(s) dans vos thématiques. <button type="button" data-act="check-alerts" class="text-btn">Actualiser ↻</button></div>':'')+
   '</section></div>';
@@ -174,7 +178,7 @@ function renderDiscover(){
     researchForm()+
     '<section class="result-panel"><div class="pane-title-row"><h2>Votre match scientifique</h2><span class="meta-hint">'+(sess.index+1)+' / '+sess.articles.length+'</span></div>'+
     '<div class="button-row" style="justify-content:space-between;margin:7px 0 12px">'+
-    btn('◫ Affiner la recherche','toggle-search-pane','secondary small')+
+    btn('◫ Afficher les filtres','toggle-search-pane','secondary small')+
     '<div class="button-row">'+btn('↶ Annuler','undo','secondary small',sess.actions.length?'':'disabled')+btn('Terminer','finish','ghost small')+'</div></div>'+
     '<div class="progress-wrap"><strong>Article '+(sess.index+1)+' sur '+sess.articles.length+'</strong><span>'+percent+' % parcourus</span></div>'+
     '<div class="progress"><div style="width:'+percent+'%"></div></div>'+
@@ -345,7 +349,7 @@ async function startSession(form){
   try{cutoff=cutoffFromPeriod(periodCount,periodUnit);}catch(error){showToast(error.message);return;}
   state.prefs.batch=batch;state.prefs.periodCount=periodCount;
   state.prefs.periodUnit=periodUnit;state.prefs.sources=sources;state.prefs.types=kinds;
-  state.prefs.quickQuery=quickQuery;state.prefs.searchScope=scope;persist();
+  state.prefs.quickQuery=quickQuery;state.prefs.searchScope=scope;state.prefs.selectedTopicIds=ids;persist();
   loading=true;render();
   const errors=[];
   try{
@@ -640,13 +644,16 @@ document.addEventListener('click',event=>{
   if(act==='go-discover')navigate('discover');
   if(act==='go-topics')navigate('topics');
   if(act==='go-settings')navigate('settings');
+  if(act==='try-example'){const input=el('quick-query');if(input){input.value=button.dataset.query||'';input.focus();updateQuickQueryFeedback();}}
   if(act==='toggle-search-pane'){
     mobileFiltersOpen=!mobileFiltersOpen;
     const shell=document.querySelector('.discover-workspace');
     shell?.classList.toggle('filters-open',mobileFiltersOpen);
   }
+  if(act==='scholar-search')openScholarSearch();
+  if(act==='scholar-import')importScholarReferences();
   if(act==='clear-quick-search'){
-    state.prefs.quickQuery='';state.prefs.periodCount=30;state.prefs.periodUnit='months';
+    state.prefs.quickQuery='';state.prefs.periodCount=3;state.prefs.periodUnit='months';state.prefs.selectedTopicIds=[];
     state.prefs.searchScope='title_abstract';state.prefs.sources=['openalex','pubmed'];
     state.prefs.types=['article','review','preprint'];persist();render();
   }
