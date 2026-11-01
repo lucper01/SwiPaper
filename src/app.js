@@ -1,7 +1,7 @@
 import { toArticle, toEuropePMCArticle, deduplicate, openAlexUrl, europePmcUrl, cutoffFromPeriod, fingerprints, zoteroFingerprints, isFresh, asRIS, asCSV, risFingerprints, zoteroItem, resetLocalLibraryState, completeSourcePage } from './core.mjs';
-import { parseScientificQuery, compileScientificQuery, evaluateScientificArticle, themeScope } from './search.mjs';
+import { parseScientificQuery, compileScientificQuery, evaluateScientificArticle, themeScope, normalizeSearchText } from './search.mjs';
 import {openAlexWorkId,citationLookupUrl,citationNeighborsUrl,batchWorksUrl,buildCitationGraph,citationLayout} from './citations.mjs';
-import {bibtexFingerprints,scholarSearchUrl} from './scholar.mjs';
+import {bibtexFingerprints,scholarSearchUrl,scholarProxyUrl} from './scholar.mjs';
 
 const STORAGE='swipaper-v1-state';
 const TITLES={discover:'Découvrir',library:'Bibliothèque',topics:'Mes thématiques',history:'Historique',settings:'Paramètres',graph:'Réseau de citations'};
@@ -10,7 +10,7 @@ const DEFAULT={
   library:{},seen:{},history:[],active:null,lastSummary:null,alerts:{lastCheck:null,known:[],unseen:[]},
   zoteroIndex:{user:'',syncedAt:null,keys:[],count:0},
   externalIndex:{importedAt:null,keys:[],count:0},
-  prefs:{periodCount:3,periodUnit:'months',sources:['openalex','pubmed'],batch:20,zoteroUser:'',zoteroCollection:'',quickQuery:'',searchScope:'title_abstract',selectedTopicIds:[],types:['article','review','preprint']}
+  prefs:{periodCount:3,periodUnit:'months',sources:['openalex','pubmed'],batch:20,zoteroUser:'',zoteroCollection:'',quickQuery:'',searchScope:'title_abstract',selectedTopicIds:[],scholarProxy:'',types:['article','review','preprint']}
 };
 let state=loadState();
 if(!state.alerts||!Array.isArray(state.alerts.known))state.alerts={lastCheck:null,known:[],unseen:[]};
@@ -134,7 +134,7 @@ function researchForm(){
   '<div class="advanced-filters-inner"><div class="field"><label>Opérateurs booléens</label><div class="query-tools">'+['AND','OR','NOT','(',')','"phrase"'].map(t=>'<button type="button" class="query-token" data-act="insert-token" data-token="'+esc(t)+'">'+esc(t)+'</button>').join('')+'</div>'+
   '<small>Sans opérateur, tous les mots sont requis. AND = ensemble, OR = alternative, NOT = exclusion, "..." = expression exacte.</small></div>'+
   '<div class="form-section"><h3>Zone de recherche</h3><label class="article-type-check"><input type="radio" name="searchScope" value="title_abstract" '+(prefs.searchScope!=='title'?'checked':'')+'> Titre et résumé</label><label class="article-type-check"><input type="radio" name="searchScope" value="title" '+(prefs.searchScope==='title'?'checked':'')+'> Titre uniquement</label></div>'+
-  '<div class="form-section"><h3>Bases bibliographiques</h3><div class="source-options"><label class="source-switch"><input type="checkbox" name="source" value="openalex" '+(sources.includes('openalex')?'checked':'')+'> OpenAlex</label><label class="source-switch"><input type="checkbox" name="source" value="pubmed" '+(sources.includes('pubmed')?'checked':'')+'> PubMed / Europe PMC</label></div></div>'+
+  '<div class="form-section"><h3>Bases bibliographiques</h3><div class="source-options"><label class="source-switch"><input type="checkbox" name="source" value="openalex" '+(sources.includes('openalex')?'checked':'')+'> OpenAlex</label><label class="source-switch"><input type="checkbox" name="source" value="pubmed" '+(sources.includes('pubmed')?'checked':'')+'> PubMed / Europe PMC</label>'+ (prefs.scholarProxy?'<label class="source-switch"><input type="checkbox" name="source" value="scholar" '+(sources.includes('scholar')?'checked':'')+'> Google Scholar via serveur</label>':'')+'</div>'+(prefs.scholarProxy?'':'<small>Source Scholar directe : à configurer dans Paramètres.</small>')+'</div>'+
   '<div class="form-section"><h3>Types de publication</h3><label class="article-type-check"><input type="checkbox" name="kind" value="article" '+(kinds.includes('article')?'checked':'')+'> Articles</label><label class="article-type-check"><input type="checkbox" name="kind" value="review" '+(kinds.includes('review')?'checked':'')+'> Revues / méta-analyses</label><label class="article-type-check"><input type="checkbox" name="kind" value="preprint" '+(kinds.includes('preprint')?'checked':'')+'> Prépublications</label></div>'+
   '<p class="tiny muted">Les critères sont vérifiés sur chaque article avant qu’il soit proposé.</p></div></details>'+
   '<div class="button-row research-tools">'+
@@ -302,6 +302,31 @@ function localFingerprints() {
 async function fetchSource(topic,source,cutoff,page,key,kinds=['article','review','preprint']) {
   const isPubmed=source==='pubmed';
   const parsed=parseScientificQuery(topic.query);
+  if(source==='scholar'){
+    const endpoint=state.prefs.scholarProxy;
+    const token=sessionStorage.getItem('swipaper-scholar-token')||'';
+    if(!endpoint||!token)throw Error('Serveur Google Scholar non configuré.');
+    const response=await fetch(scholarProxyUrl(endpoint,topic.query,cutoff,page),{headers:{'X-Swipaper-Token':token,Accept:'application/json'}});
+    if(!response.ok)throw Error('Serveur Scholar HTTP '+response.status);
+    const payload=await response.json();
+    const rows=(payload.results||[]).filter(r=>r.title).slice(0,10);
+    const results=await Promise.allSettled(rows.map(async row=>{
+      const url=openAlexUrl(row.title,{cutoff,perPage:5,page:1,key,scope:'title'});
+      const r=await fetch(url,{headers:{Accept:'application/json'}});
+      if(!r.ok)throw Error('Métadonnées OpenAlex HTTP '+r.status);
+      const data=await r.json(),target=normalizeSearchText(row.title);
+      const raw=(data.results||[]).find(w=>normalizeSearchText(w.title||w.display_name)===target);
+      if(!raw)return null;
+      const article=toArticle(raw,topic.name);
+      const type=String(raw.type||raw.type_crossref||'').toLowerCase();
+      article.kind=/preprint|posted.content/.test(type)?'preprint':/review|meta.analysis/.test(type)?'review':'article';
+      article.source='Google Scholar / OpenAlex';
+      if(!article.date||article.abstract.length<=35||!kinds.includes(article.kind))return null;
+      const relevance=evaluateScientificArticle(article,parsed,themeScope(topic));
+      return relevance.matches?{...article,relevanceScore:relevance.score,matchingTerms:relevance.matched,titleTerms:relevance.titleMatched,scope:themeScope(topic)}:null;
+    }));
+    return completeSourcePage(rows,results.filter(r=>r.status==='fulfilled'&&r.value).map(r=>r.value),10);
+  }
   const scope=themeScope(topic);
   const query=compileScientificQuery(parsed,isPubmed?'europepmc':'openalex',scope);
   const url=isPubmed?europePmcUrl(query,{cutoff,page,pageSize:75})
@@ -331,7 +356,7 @@ async function startSession(form){
   if(loading)return;
   const fd=new FormData(form);
   const ids=fd.getAll('topic');
-  const sources=fd.getAll('source').filter(v=>['openalex','pubmed'].includes(v));
+  const sources=fd.getAll('source').filter(v=>['openalex','pubmed','scholar'].includes(v));
   const kinds=fd.getAll('kind').filter(v=>['article','review','preprint'].includes(v));
   const quickQuery=String(fd.get('quickQuery')||'').trim();
   const scope=String(fd.get('searchScope')||'title_abstract');
@@ -345,6 +370,9 @@ async function startSession(form){
   if(!selected.length){showToast('Saisissez une requête ou sélectionnez au moins une thématique enregistrée.');return;}
   if(!sources.length){showToast('Sélectionnez au moins une base bibliographique.');return;}
   if(!kinds.length){showToast('Sélectionnez au moins un type d’article.');return;}
+  if(sources.includes('scholar')&&(!state.prefs.scholarProxy||!sessionStorage.getItem('swipaper-scholar-token'))){
+    showToast('Google Scholar : configurez le serveur et son jeton dans les paramètres.');return;
+  }
   for(const t of selected){try{parseScientificQuery(t.query);}catch(error){showToast(t.name+' : '+error.message);return;}}
   if(state.active&&!confirm('Remplacer la session en cours ? Les articles déjà traités resteront sauvegardés.'))return;
   const batch=Math.min(50,Math.max(10,Number(fd.get('batch'))||20));
@@ -634,6 +662,10 @@ function renderSettings(){
     '<form id="settings-form" class="form-stack"><div class="field"><label for="zotero-user">Identifiant numérique Zotero</label><input id="zotero-user" name="zoteroUser" inputmode="numeric" pattern="[0-9]*" placeholder="Ex. 1234567" value="'+esc(state.prefs.zoteroUser)+'"></div>'+
     '<div class="field"><label for="zotero-key">Clé API Zotero</label><input id="zotero-key" name="zoteroKey" type="password" autocomplete="off" placeholder="Clé API temporaire"><small>Clé conservée uniquement dans le stockage de session du navigateur, jamais dans le dépôt ni dans les sauvegardes.</small></div>'+
     '<div class="field"><label for="zotero-collection">Collection Zotero de destination (facultative)</label><input id="zotero-collection" name="zoteroCollection" maxlength="8" placeholder="Ex. ABCD1234" value="'+esc(state.prefs.zoteroCollection)+'"><small>Ce choix concerne l’export uniquement : l’exclusion des doublons examine toute la bibliothèque.</small></div>'+
+    '<details class="advanced-filters"><summary>Google Scholar (connexion serveur facultative)</summary><div class="advanced-filters-inner">'+
+    '<p class="tiny muted">Pour interroger Google Scholar automatiquement, un serveur privé et un fournisseur tiers sont nécessaires. Sinon, utilisez l’import BibTeX/EndNote.</p>'+
+    '<div class="field"><label for="scholar-proxy">URL du serveur Scholar</label><input id="scholar-proxy" name="scholarProxy" type="url" placeholder="https://example.workers.dev" value="'+esc(state.prefs.scholarProxy||'')+'"></div>'+
+    '<div class="field"><label for="scholar-token">Jeton d’accès au serveur</label><input id="scholar-token" name="scholarToken" type="password" autocomplete="off" placeholder="Jeton temporaire"><small>Il reste uniquement dans le navigateur pendant la session.</small></div></div></details>'+
     '<div class="field"><label for="openalex-key">Clé API OpenAlex (facultative)</label><input id="openalex-key" name="openalexKey" type="password" autocomplete="off" placeholder="Clé gratuite personnelle"><small>Augmente les quotas de recherche sur OpenAlex. Sans clé, un usage occasionnel demeure possible.</small></div>'+
     '<div class="button-row"><button class="btn" type="submit">Enregistrer</button>'+btn(syncingZotero?'Synchronisation…':'↻ Vérifier ma bibliothèque Zotero','sync-zotero','secondary',syncingZotero?'disabled':'')+btn('Dissocier Zotero','unlink-zotero','ghost')+'</div></form></div>'+
     '<div class="soft-panel"><p class="eyebrow">AUTRES BIBLIOTHÈQUES</p><h2 class="section-title">Importer des références RIS</h2>'+
@@ -828,6 +860,11 @@ document.addEventListener('submit',event=>{
     state.prefs.zoteroCollection=form.elements.zoteroCollection.value.trim().toUpperCase();
     if(form.elements.zoteroKey.value.trim())sessionStorage.setItem('swipaper-zotero',form.elements.zoteroKey.value.trim());
     if(form.elements.openalexKey.value.trim())sessionStorage.setItem('swipaper-openalex',form.elements.openalexKey.value.trim());
+    const nextProxy=String(form.elements.scholarProxy?.value||'').trim();
+    if(nextProxy&&!/^https:\/\//i.test(nextProxy)){showToast('Le serveur Scholar doit être en HTTPS.');return;}
+    if(nextProxy!==state.prefs.scholarProxy)sessionStorage.removeItem('swipaper-scholar-token');
+    state.prefs.scholarProxy=nextProxy;
+    if(form.elements.scholarToken?.value.trim())sessionStorage.setItem('swipaper-scholar-token',form.elements.scholarToken.value.trim());
     saveAndRender();showToast('Préférences enregistrées sur cet appareil.');
   }
 });
