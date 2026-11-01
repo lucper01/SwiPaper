@@ -1,0 +1,13 @@
+name = "swipaper-scholar-proxy"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+CLIENT_ORIGIN = "https://lucper01.github.io"
+
+[[ratelimits]]
+name = "SCHOLAR_RATE_LIMITER"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 5
+  period = 60

@@ -62,3 +62,14 @@ export function bibtexFingerprints(source){
   for(const record of records)for(const fp of fingerprints(record))keys.add(fp);
   return {count:records.length,keys:[...keys]};
 }
+
+export function scholarProxyUrl(endpoint,query,cutoff,page=1){
+ const url=new URL(endpoint);
+ if(url.protocol!=='https:')throw new Error('Le serveur Scholar doit utiliser HTTPS.');
+ if(url.username||url.password)throw new Error('URL avec identifiants refusée.');
+ if(!url.pathname.endsWith('/api/scholar'))url.pathname=url.pathname.replace(/\/$/,'')+'/api/scholar';
+ url.searchParams.set('q',String(query||'').trim());
+ url.searchParams.set('from',String(cutoff));
+ url.searchParams.set('page',String(page));
+ return url.toString();
+}

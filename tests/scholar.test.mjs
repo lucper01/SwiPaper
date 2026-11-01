@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {bibtexFingerprints,scholarSearchUrl} from '../src/scholar.mjs';
+import {bibtexFingerprints,scholarSearchUrl,scholarProxyUrl} from '../src/scholar.mjs';
 test('Scholar link uses supplied keywords',()=>{
   const url=new URL(scholarSearchUrl('olfactory attention'));
   assert.equal(url.hostname,'scholar.google.com');
@@ -15,4 +15,12 @@ test('BibTeX import recognizes identifiers and nested titles',()=>{
 });
 test('empty BibTeX import produces no phantom records',()=>{
  assert.equal(bibtexFingerprints('not bibtex').count,0);
+});
+
+test('Optional Scholar proxy requires HTTPS and forwards search parameters',()=>{
+ const u=new URL(scholarProxyUrl('https://example.workers.dev','olfaction','2026-10-01',2));
+ assert.equal(u.pathname,'/api/scholar');
+ assert.equal(u.searchParams.get('q'),'olfaction');
+ assert.equal(u.searchParams.get('page'),'2');
+ assert.throws(()=>scholarProxyUrl('http://example.com','x','2026-10-01'));
 });
