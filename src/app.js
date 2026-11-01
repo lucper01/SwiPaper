@@ -1,8 +1,10 @@
 import { toArticle, toEuropePMCArticle, deduplicate, openAlexUrl, europePmcUrl, cutoffFromPeriod, fingerprints, zoteroFingerprints, isFresh, asRIS, asCSV, risFingerprints, zoteroItem, resetLocalLibraryState, completeSourcePage } from './core.mjs';
 import { parseScientificQuery, compileScientificQuery, evaluateScientificArticle, themeScope } from './search.mjs';
+import {openAlexWorkId,citationLookupUrl,citationNeighborsUrl,batchWorksUrl,buildCitationGraph,citationLayout} from './citations.mjs';
+import {bibtexFingerprints,scholarSearchUrl} from './scholar.mjs';
 
 const STORAGE='swipaper-v1-state';
-const TITLES={discover:'Découvrir',library:'Bibliothèque',topics:'Mes thématiques',history:'Historique',settings:'Paramètres'};
+const TITLES={discover:'Découvrir',library:'Bibliothèque',topics:'Mes thématiques',history:'Historique',settings:'Paramètres',graph:'Réseau de citations'};
 const DEFAULT={
   topics:[],
   library:{},seen:{},history:[],active:null,lastSummary:null,alerts:{lastCheck:null,known:[],unseen:[]},
@@ -22,6 +24,7 @@ let toastTimer;
 let installing=null;
 let swipeAnimationLocked=false;
 let mobileFiltersOpen=false;
+let graphState={loading:false,data:null,error:'',selected:null,article:null};
 const root=document.querySelector('#view');
 const toastBox=document.querySelector('#toast');
 const el=(id)=>document.getElementById(id);
@@ -52,7 +55,8 @@ function btn(label,action,cls='secondary',attrs=''){
   return '<button type="button" class="btn '+cls+'" data-act="'+action+'" '+attrs+'>'+label+'</button>';
 }
 function empty(title,description,action='',label=''){
-  return '<div class="empty"><div class="symbol">◈</div><h3>'+esc(title)+'</h3><p>'+esc(description)+'</p>'+(action?btn(esc(label),action,'primary'):'')+'</div>';
+  const pose=view==='library'?'library':view==='graph'?'citations':view==='topics'?'thinking':'discover';
+  return '<div class="empty"><img class="giraffe-variant empty-giraffe" src="./assets/giraffe-'+pose+'.svg" alt=""><h3>'+esc(title)+'</h3><p>'+esc(description)+'</p>'+(action?btn(esc(label),action,'primary'):'')+'</div>';
 }
 function topicById(id){return state.topics.find(t=>t.id===id);}
 function giraffeMascot(){
@@ -89,6 +93,7 @@ function render(){
   if(view==='topics')renderTopics();
   if(view==='history')renderHistory();
   if(view==='settings')renderSettings();
+  if(view==='graph')renderGraph();
 }
 function navigate(next){
   if(!TITLES[next])return;
@@ -162,7 +167,7 @@ function paperCard(a){
     '<div class="match-summary"><span class="match-score">'+(Number.isFinite(a.relevanceScore)?a.relevanceScore+'/100':'Recherche vérifiée')+'</span><div><strong>Correspondance vérifiée</strong><small>'+esc((a.scope==='title'?'Dans le titre':'Dans le titre ou le résumé')+' · '+(a.matchingTerms?.length||0)+' terme(s) trouvé(s)')+'</small></div></div><hr>'+
     '<p class="muted-label">LE RÉSUMÉ</p><p class="abstract">'+esc(a.abstract||'Résumé indisponible.')+'</p>'+
     '<div class="matched-chips">'+(a.matchingTerms||[]).slice(0,6).map(term=>'<span class="matched-chip">✓ '+esc(term)+'</span>').join('')+'</div>'+
-    '<div class="paper-links">'+(a.doi?'<a href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer">↗ DOI</a>':'')+
+    '<div class="paper-links">'+btn('◎ Citations','graph-current','secondary small')+(a.doi?'<a href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer">↗ DOI</a>':'')+
     (a.url&&!a.doi?'<a href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer">↗ Article</a>':'')+
     (a.pdf?'<a href="'+esc(a.pdf)+'" target="_blank" rel="noopener noreferrer">↗ PDF disponible</a>':'')+'</div></article>';
 }
@@ -249,7 +254,7 @@ function finishSession(){
 function endScreen(s){
   const c=counts(s.actions);
   return pageIntro('VOTRE SESSION EST TERMINÉE','Une belle récolte.','Voici le bilan de votre exploration scientifique.')+
-    '<div class="end-card"><p class="eyebrow" style="color:#b5d5b8">RÉCAPITULATIF</p><h2 class="page-title">Session terminée.</h2><p class="page-subtitle">Vos décisions sont sauvegardées dans votre bibliothèque et votre historique.</p>'+
+    '<div class="end-card"><img class="giraffe-variant finish-giraffe" src="./assets/giraffe-success.svg" alt=""><p class="eyebrow" style="color:#b5d5b8">RÉCAPITULATIF</p><h2 class="page-title">Session terminée.</h2><p class="page-subtitle">Vos décisions sont sauvegardées dans votre bibliothèque et votre historique.</p>'+
     '<div class="end-stats"><div><strong>'+s.actions.length+'</strong><small>Parcourus</small></div><div><strong>'+c.liked+'</strong><small>Intéressants</small></div><div><strong>'+c.later+'</strong><small>À revoir</small></div><div><strong>'+c.rejected+'</strong><small>Écartés</small></div></div>'+
     '<div class="end-actions">'+btn('Nouvelle session','reset-summary','primary')+btn('Exporter en RIS','export-last-ris','secondary')+btn('Récap par e-mail','email-last','secondary')+btn('Envoyer vers Zotero','zotero-last','secondary')+'</div></div>'+
     '<div class="spacer"></div><div class="pill-note">L’e-mail s’ouvre dans votre application de messagerie pour validation. L’envoi automatique sera disponible dans une future version.</div>';
@@ -523,7 +528,7 @@ function renderLibrary(){
   const header=pageIntro('VOTRE BIBLIOTHÈQUE','Des articles qui comptent.','Retrouvez les publications sauvegardées au cours de vos sessions.',
     '<div class="button-row">'+btn('↓ Exporter RIS','export-library-ris','secondary small')+btn('↓ Exporter CSV','export-library-csv','secondary small')+btn('↗ Zotero','zotero-library','primary small')+btn('Réinitialiser','reset-library','danger small')+'</div>');
   root.innerHTML=header+'<div class="filters">'+tabs.map(([key,label])=>'<button class="chip '+(key===libraryFilter?'active':'')+'" data-act="library-filter" data-filter="'+key+'">'+label+' · '+all.filter(x=>x.status===key).length+'</button>').join('')+'</div>'+
-    (chosen.length?'<div class="list-stack">'+chosen.map(({article:a,status})=>'<article class="list-card"><div><h3>'+esc(a.title)+'</h3><p>'+esc(a.authors.slice(0,3).join(', '))+' · '+esc(a.journal)+' · '+esc(a.year||'')+'</p><div class="meta"><span>'+esc(a.topic)+'</span>'+(a.doi?'<a target="_blank" rel="noopener noreferrer" href="'+esc(a.url)+'">↗ DOI : '+esc(a.doi)+'</a>':'')+(a.pdf?'<a target="_blank" rel="noopener noreferrer" href="'+esc(a.pdf)+'">↗ PDF</a>':'')+'</div></div><div class="button-row">'+(status==='later'?btn('Conserver','promote','secondary small','data-id="'+esc(a.id)+'"'):'')+btn('Retirer','remove-library','ghost small','data-id="'+esc(a.id)+'"')+'</div></article>').join('')+'</div>':empty('Aucun article dans cette catégorie','Commencez une session et glissez les articles qui vous intéressent vers la droite.','go-discover','Découvrir'));
+    (chosen.length?'<div class="library-illustration"><img class="giraffe-variant library-giraffe" src="./assets/giraffe-library.svg" alt=""><span>'+chosen.length+' référence(s)</span></div><div class="list-stack">'+chosen.map(({article:a,status})=>'<article class="list-card"><div><h3>'+esc(a.title)+'</h3><p>'+esc(a.authors.slice(0,3).join(', '))+' · '+esc(a.journal)+' · '+esc(a.year||'')+'</p><div class="meta"><span>'+esc(a.topic)+'</span>'+(a.doi?'<a target="_blank" rel="noopener noreferrer" href="'+esc(a.url)+'">↗ DOI : '+esc(a.doi)+'</a>':'')+(a.pdf?'<a target="_blank" rel="noopener noreferrer" href="'+esc(a.pdf)+'">↗ PDF</a>':'')+'</div></div><div class="button-row">'+(status==='later'?btn('Conserver','promote','secondary small','data-id="'+esc(a.id)+'"'):'')+btn('◎ Citations','graph-library','secondary small','data-id="'+esc(a.id)+'"')+btn('Retirer','remove-library','ghost small','data-id="'+esc(a.id)+'"')+'</div></article>').join('')+'</div>':empty('Aucun article dans cette catégorie','Commencez une session et glissez les articles qui vous intéressent vers la droite.','go-discover','Découvrir'));
 }
 function renderHistory(){
   const sessions=state.history;
@@ -651,6 +656,11 @@ document.addEventListener('click',event=>{
     shell?.classList.toggle('filters-open',mobileFiltersOpen);
   }
   if(act==='scholar-search')openScholarSearch();
+  if(act==='graph-current'&&state.active)openCitationGraph(state.active.articles[state.active.index]);
+  if(act==='graph-library'&&state.library[id])openCitationGraph(state.library[id].article);
+  if(act==='graph-retry'&&graphState.article)openCitationGraph(graphState.article);
+  if(act==='graph-node')selectGraphNode(id);
+  if(act==='graph-related'&&graphState.selected)openCitationGraph({openAlexId:'https://openalex.org/'+graphState.selected.id,title:graphState.selected.title,doi:graphState.selected.doi});
   if(act==='scholar-import')importScholarReferences();
   if(act==='clear-quick-search'){
     state.prefs.quickQuery='';state.prefs.periodCount=3;state.prefs.periodUnit='months';state.prefs.selectedTopicIds=[];
