@@ -178,7 +178,14 @@ function paperCard(a){
     (a.pdf?'<a href="'+esc(a.pdf)+'" target="_blank" rel="noopener noreferrer">↗ PDF disponible</a>':'')+'</div></article>';
 }
 function renderDiscover(){
-  if(!state.active){root.innerHTML=showCompletion&&state.lastSummary?endScreen(state.lastSummary):setup();updateQuickQueryFeedback();return;}
+  // Protect startup if an interrupted older release stored an incomplete session.
+  if(state.active&&(!Array.isArray(state.active.articles)||!Array.isArray(state.active.actions)||
+     !Number.isInteger(state.active.index)||state.active.index<0)){
+    state.active=null;
+    persist();
+    showToast('La session précédente était incomplète. Vous pouvez lancer une nouvelle recherche.');
+  }
+  if(!state.active){root.classList.remove('session-layout');root.innerHTML=showCompletion&&state.lastSummary?endScreen(state.lastSummary):setup();updateQuickQueryFeedback();return;}
   const sess=state.active;
   const article=sess.articles[sess.index];
   if(!article){finishSession();return;}

@@ -289,3 +289,41 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .citation-filter:hover{border-color:#4e9e70}
 .citation-filter:focus-visible{outline:3px solid #83c89d}
 .citation-visible-count{font-size:10px;color:#82998a;margin-bottom:8px}
+
+/* At tablet widths, a two-column viewport-locked session would create an
+   inaccessible second row. Put the article first and allow normal scrolling. */
+@media(min-width:721px) and (max-width:900px){
+  #view.session-layout{
+    height:auto;
+    min-height:calc(100dvh - 75px);
+    overflow:visible;
+    padding-top:14px;
+    padding-bottom:60px;
+  }
+  #view.session-layout>.discover-workspace.has-active{
+    display:flex;
+    flex-direction:column;
+    height:auto;
+    overflow:visible;
+    gap:16px;
+  }
+  #view.session-layout>.discover-workspace.has-active>.result-panel{
+    order:0;
+    width:100%;
+    min-height:600px;
+    height:auto;
+    overflow:visible;
+  }
+  #view.session-layout>.discover-workspace.has-active>.research-panel{
+    order:1;
+    width:100%;
+    max-height:none;
+    overflow:visible;
+  }
+  #view.session-layout .result-panel>.swipe-scene{flex:initial;height:auto}
+  #view.session-layout .paper-stack{height:auto}
+  #view.session-layout .paper-card{height:auto;max-height:none;min-height:430px!important}
+  #view.session-layout .paper-card>.abstract{flex:initial;max-height:220px!important;overflow-y:auto}
+  #view.session-layout .search-session-meta{display:grid}
+}
+/* Keep library / citation detail scrolling separate from a locked desktop session. */

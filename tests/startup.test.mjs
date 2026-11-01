@@ -12,7 +12,12 @@ function startApp(){
  const registry=new Map();
  const makeNode=(id)=>({
   id,innerHTML:'',textContent:'',hidden:false,dataset:{},
-  style:{},classList:{toggle(){},add(){},remove(){}},
+  style:{},
+  classList:(()=>{
+    const classes=new Set();
+    return {toggle(name,force){if(force===undefined? !classes.has(name):force)classes.add(name);else classes.delete(name)},
+      add(name){classes.add(name)},remove(name){classes.delete(name)},contains(name){return classes.has(name)}};
+  })(),
   addEventListener(){},setAttribute(){},appendChild(){},remove(){},
   matches(){return false},closest(){return null}
  });
@@ -76,4 +81,19 @@ test('Active session uses viewport layout and keeps other screens unaffected',()
  assert.match(registry.get('view').innerHTML,/swipe-scene/);
  assert.match(registry.get('view').innerHTML,/swipe-card/);
  assert.match(registry.get('view').innerHTML,/giraffe-motion/);
+});
+
+test('Session viewport class is applied only while Discover has an active session',()=>{
+ const {context,registry}=startApp();
+ const root=registry.get('view');
+ assert.equal(root.classList.contains('session-layout'),false);
+ vm.runInContext("state.active={id:'s1',articles:[{id:'item',title:'Effects of attention on olfaction',authors:['A'],abstract:'Experimental investigation',year:2026}],index:0,actions:[]};render();",context);
+ assert.equal(root.classList.contains('session-layout'),true);
+ vm.runInContext("view='library';render();",context);
+ assert.equal(root.classList.contains('session-layout'),false);
+});
+test('Tablet media query returns to natural scrolling rather than clipping stacked panels',()=>{
+ const css=fs.readFileSync(new URL('../styles.css',import.meta.url),'utf8');
+ assert.match(css,/@media\(min-width:721px\) and \(max-width:900px\)/);
+ assert.match(css,/#view\.session-layout\s*\{\s*height:auto;/);
 });
