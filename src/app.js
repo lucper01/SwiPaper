@@ -425,7 +425,7 @@ function attachSwipe(){
   const card=el('swipe-card');if(!card)return;
   let pointer=null;
   card.addEventListener('pointerdown',event=>{
-    if(event.target.closest('a')||(event.pointerType==='mouse'&&event.target.closest('.abstract')))return;
+    if(event.target.closest('a,button,input,select,textarea,[data-act]')||(event.pointerType==='mouse'&&event.target.closest('.abstract')))return;
     if(event.pointerType==='mouse'&&event.button!==0)return;
     pointer={id:event.pointerId,x:event.clientX,y:event.clientY,dx:0,dy:0};
     card.classList.add('dragging');
