@@ -69,3 +69,11 @@ test('New session button returns to search, preserving previous history',()=>{
  assert.match(registry.get('view').innerHTML,/session-form/);
  assert.equal(vm.runInContext('state.history.length',context),1);
 });
+
+test('Active session uses viewport layout and keeps other screens unaffected',()=>{
+ const {context,registry}=startApp();
+ vm.runInContext("state.active={id:'example',started:'2026-10-30',articles:[{id:'doi:10.1234/a',title:'Experimental olfactory temporal perception',authors:['A Researcher'],abstract:'An empirical abstract',year:2026,source:'OpenAlex'}],index:0,actions:[]};render();",context);
+ assert.match(registry.get('view').innerHTML,/swipe-scene/);
+ assert.match(registry.get('view').innerHTML,/swipe-card/);
+ assert.match(registry.get('view').innerHTML,/giraffe-motion/);
+});

@@ -90,6 +90,7 @@ function render(){
   el('breadcrumb').textContent=TITLES[view];
   document.querySelectorAll('[data-view]').forEach(node=>node.classList.toggle('active',node.dataset.view===view));
   el('saved-count').textContent=Object.values(state.library).filter(x=>x.status==='liked').length;
+  root.classList.toggle('session-layout',view==='discover'&&!!state.active);
   if(view==='discover')renderDiscover();
   if(view==='library')renderLibrary();
   if(view==='topics')renderTopics();
@@ -204,22 +205,46 @@ function renderDiscover(){
   updateQuickQueryFeedback();
   attachSwipe();
 }
+function giraffeNeckElement(){
+  return document.querySelector('#swipe-scene .giraffe-motion');
+}
+function tiltGiraffe(angle,animate=false){
+  const neck=giraffeNeckElement();
+  if(!neck)return;
+  // Use the SVG viewport's neck base as an explicit pivot. This is more
+  // reliable for desktop SVG than relying on a CSS variable alone.
+  neck.style.transformOrigin='90px 216px';
+  neck.style.transformBox='view-box';
+  neck.style.animation='none';
+  const deg=Math.max(-52,Math.min(52,angle));
+  if(animate&&typeof neck.animate==='function'){
+    neck.style.transition='none';
+    neck.animate([
+      {transform:neck.style.transform||'rotate(0deg)',offset:0},
+      {transform:'rotate('+deg+'deg)',offset:.58},
+      {transform:'rotate('+(deg*.83)+'deg)',offset:1}
+    ],{duration:520,easing:'cubic-bezier(.2,.7,.2,1)',fill:'forwards'});
+  }else{
+    neck.style.transition=animate?'transform .52s ease-out':'transform .09s linear';
+    neck.style.transform='rotate('+deg+'deg)';
+  }
+}
 function animatedDecision(decision){
   if(swipeAnimationLocked||!state.active)return;
   if(!['liked','rejected','later'].includes(decision))return;
   const scene=el('swipe-scene');
-  const prefersLessMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches===true;
-  if(!scene||prefersLessMotion){decide(decision);return;}
-  scene.style.removeProperty('--neck-angle');
+  if(!scene){decide(decision);return;}
   swipeAnimationLocked=true;
   scene.classList.add(decision==='liked'?'swipe-to-right':decision==='rejected'?'swipe-to-left':'swipe-to-later');
+  const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches===true;
+  tiltGiraffe(decision==='liked'?50:decision==='rejected'?-50:12,!reduced);
   document.querySelectorAll('.swipe-actions button').forEach(button=>button.disabled=true);
   const id=state.active.id;
   const index=state.active.index;
   window.setTimeout(()=>{
     swipeAnimationLocked=false;
     if(state.active?.id===id && state.active.index===index)decide(decision);
-  },460);
+  },reduced?180:520);
 }
 function decide(decision){
   const s=state.active;
@@ -424,6 +449,7 @@ async function startSession(form){
       .filter(a=>isFresh(a,{cutoff,seen,zotero})).slice(0,batch);
     if(!merged.length)throw new Error('Aucun article inédit avec résumé pour cette période : élargissez-la ou changez les mots-clés.');
     state.active={id:uid(),started:new Date().toISOString(),articles:merged,index:0,actions:[],cutoff,sources,query:quickQuery};mobileFiltersOpen=false;
+    window.scrollTo({top:0,behavior:'instant'});
     state.lastSummary=null;persist();
     if(errors.length)showToast('Résultats partiels : '+errors[0]);
   }catch(error){searchError=error.message;showToast('Recherche impossible : '+error.message);}
@@ -431,7 +457,8 @@ async function startSession(form){
 }
 function attachSwipe(){
   const card=el('swipe-card');if(!card)return;
-  const scene=el('swipe-scene');scene?.style.removeProperty('--neck-angle');
+  const scene=el('swipe-scene');
+  tiltGiraffe(0);
   let pointer=null;
   card.addEventListener('pointerdown',event=>{
     if(event.target.closest('a,button,input,select,textarea,[data-act]')||(event.pointerType==='mouse'&&event.target.closest('.abstract')))return;
@@ -445,7 +472,7 @@ function attachSwipe(){
     pointer.dx=event.clientX-pointer.x;pointer.dy=event.clientY-pointer.y;
     if(Math.abs(pointer.dx)>12&&Math.abs(pointer.dx)>Math.abs(pointer.dy)){
       card.style.transform='translateX('+Math.max(-170,Math.min(170,pointer.dx))+'px) rotate('+(pointer.dx/27)+'deg)';
-      scene?.style.setProperty('--neck-angle',Math.max(-28,Math.min(28,pointer.dx*.2))+'deg');
+      tiltGiraffe(Math.max(-48,Math.min(48,pointer.dx*.32)));
     }
   });
   function end(event){
@@ -453,10 +480,10 @@ function attachSwipe(){
     const dx=pointer.dx,dy=pointer.dy;
     pointer=null;card.classList.remove('dragging');card.style.transform='';
     if(Math.abs(dx)>95&&Math.abs(dx)>Math.abs(dy)*1.3)animatedDecision(dx>0?'liked':'rejected');
-    else scene?.style.removeProperty('--neck-angle');
+    else tiltGiraffe(0);
   }
   card.addEventListener('pointerup',end);
-  card.addEventListener('pointercancel',()=>{pointer=null;card.style.transform='';card.classList.remove('dragging');scene?.style.removeProperty('--neck-angle');});
+  card.addEventListener('pointercancel',()=>{pointer=null;card.style.transform='';card.classList.remove('dragging');tiltGiraffe(0);});
 }
 async function checkNewPapers(manual=false) {
   if(alertLoading||!navigator.onLine)return;
