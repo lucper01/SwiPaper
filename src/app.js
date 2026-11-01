@@ -538,6 +538,89 @@ function renderHistory(){
       return '<article class="list-card"><div><h3>Session du '+esc(new Date(s.started).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}))+'</h3><p>'+s.actions.length+' articles examinés · '+c.liked+' conservés · '+c.later+' à revoir · '+c.rejected+' écartés</p><span class="tag alt">'+esc(new Date(s.started).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}))+'</span></div><div class="button-row">'+btn('RIS','history-ris','secondary small','data-id="'+esc(s.id)+'"')+btn('E-mail','history-email','secondary small','data-id="'+esc(s.id)+'"')+'</div></article>';
     }).join('')+'</div>':empty('Votre historique est vide','Les sessions terminées apparaîtront ici.','go-discover','Démarrer une session'));
 }
+function openScholarSearch(){
+  const query=el('quick-query')?.value.trim()||state.prefs.quickQuery||'';
+  if(!query){showToast('Saisissez des mots-clés avant d’ouvrir Google Scholar.');return;}
+  window.open(scholarSearchUrl(query),'_blank','noopener,noreferrer');
+}
+function importScholarReferences(){
+  const input=document.createElement('input');input.type='file';input.accept='.bib,.bibtex,.ris,.enw,text/plain';
+  input.addEventListener('change',async()=>{
+    try {
+      const f=input.files?.[0];if(!f)return;
+      if(f.size>12*1024*1024)throw Error('Fichier supérieur à 12 Mo.');
+      const data=await f.text();
+      const result=/\.(bib|bibtex)$/i.test(f.name)?bibtexFingerprints(data):risFingerprints(data);
+      if(!result.count)throw Error('Aucune référence reconnue. Exportez en BibTeX ou EndNote.');
+      state.externalIndex={importedAt:new Date().toISOString(),count:(state.externalIndex?.count||0)+result.count,
+        keys:[...new Set([...(state.externalIndex?.keys||[]),...result.keys])]};
+      saveAndRender();showToast(result.count+' référence(s) Scholar importée(s) pour le dédoublonnage.');
+    }catch(e){showToast('Import Google Scholar : '+e.message);}
+  });input.click();
+}
+async function openCitationGraph(article){
+  if(!article){showToast('Sélectionnez un article.');return;}
+  graphState={loading:true,data:null,error:'',selected:null,article};
+  navigate('graph');
+  const key=sessionStorage.getItem('swipaper-openalex')||'';
+  async function json(url){
+    if(!url)throw Error('DOI ou identifiant OpenAlex absent.');
+    const r=await fetch(url,{headers:{Accept:'application/json'}});
+    if(!r.ok)throw Error('OpenAlex HTTP '+r.status);
+    return r.json();
+  }
+  try{
+    const raw=await json(citationLookupUrl(article,key));
+    const seed=Array.isArray(raw.results)?raw.results[0]:raw;
+    if(!seed?.id)throw Error('Article introuvable sur OpenAlex.');
+    const urls=[batchWorksUrl((seed.referenced_works||[]).slice(0,12),key),
+      citationNeighborsUrl(openAlexWorkId(seed.id),'citing',key,12),
+      batchWorksUrl((seed.related_works||[]).slice(0,7),key)];
+    const results=await Promise.allSettled(urls.map(url=>url?json(url):Promise.resolve({results:[]})));
+    if(results.every(x=>x.status==='rejected'))throw Error('Impossible de récupérer les relations.');
+    const [references,citing,related]=results.map(x=>x.status==='fulfilled'?x.value.results||[]:[]);
+    graphState.data=buildCitationGraph(seed,{references,citing,related});
+    graphState.selected=graphState.data.nodes[0];
+    if(results.some(x=>x.status==='rejected'))showToast('Réseau partiel : certaines relations sont indisponibles.');
+  }catch(e){graphState.error=e.message;}
+  finally{graphState.loading=false;if(view==='graph')renderGraph();}
+}
+function selectGraphNode(id){
+  const node=graphState.data?.nodes.find(n=>n.id===id);
+  if(node){graphState.selected=node;renderGraph();}
+}
+function renderGraph(){
+  const g=graphState.data;
+  const intro=pageIntro('CITATIONS','Explorer les liens entre articles','Références, articles citants et travaux apparentés issus d’OpenAlex.',
+    btn('Retour à la recherche','go-discover','secondary small'));
+  if(graphState.loading){root.innerHTML=intro+'<div class="network-loading"><img src="./assets/giraffe-citations.svg" alt="" width="125"><p>Chargement des relations…</p></div>';return;}
+  if(graphState.error||!g){root.innerHTML=intro+empty('Réseau indisponible',graphState.error||'Choisissez un article.',graphState.article?'graph-retry':'go-discover',graphState.article?'Réessayer':'Rechercher');return;}
+  const pos=citationLayout(g),color={seed:'#276448',references:'#67a884',citing:'#d69d60',related:'#849bb8'};
+  const lines=g.edges.map(e=>{
+    const a=pos[e.source],b=pos[e.target];
+    return a&&b?'<line x1="'+a.x+'" y1="'+a.y+'" x2="'+b.x+'" y2="'+b.y+'" stroke="'+color[e.type]+'" stroke-width="3" opacity=".5"/>':'';
+  }).join('');
+  const nodes=g.nodes.map(n=>{
+    const p=pos[n.id];if(!p)return '';
+    const radius=n.id===g.seed?34:20;
+    const title=n.title.length>30?n.title.slice(0,28)+'…':n.title;
+    return '<g role="button" tabindex="0" class="citation-node" data-act="graph-node" data-id="'+esc(n.id)+'" aria-label="'+esc(n.title)+'">'+
+      '<circle cx="'+p.x+'" cy="'+p.y+'" r="'+radius+'" fill="'+color[n.category]+'" stroke="'+(graphState.selected?.id===n.id?'#1d4a35':'white')+'" stroke-width="5"/>'+
+      '<text x="'+p.x+'" y="'+(p.y+4)+'" text-anchor="middle" fill="white" font-size="11">'+(n.id===g.seed?'ÉTUDE':'●')+'</text>'+
+      '<text x="'+p.x+'" y="'+(p.y+radius+17)+'" text-anchor="middle" fill="#274b35" font-size="10">'+esc(title)+'</text></g>';
+  }).join('');
+  const n=graphState.selected||g.nodes[0],groups=[['references','Cités'],['citing','Citants'],['related','Apparentés']];
+  root.innerHTML=intro+'<div class="citation-layout"><section class="citation-canvas"><div class="network-legend">'+
+    groups.map(([k,label])=>'<span><i style="background:'+color[k]+'"></i>'+label+'</span>').join('')+'</div>'+
+    '<svg class="citation-svg" viewBox="0 0 1020 620" role="group" aria-label="Carte des relations bibliographiques">'+lines+nodes+'</svg>'+
+    '<p class="tiny muted">Sélectionnez un nœud. Le graphe présente un échantillon des relations connues.</p></section>'+
+    '<aside class="citation-details"><img class="giraffe-variant citation-giraffe" src="./assets/giraffe-citations.svg" alt="">'+
+    '<p class="eyebrow">PUBLICATION</p><h2>'+esc(n.title)+'</h2><p class="tiny muted">'+esc(n.authors.join(', ')||'Auteur non renseigné')+' · '+esc(n.year||'Date inconnue')+'</p>'+
+    '<div class="citation-counters">'+groups.map(([k,label])=>'<div><strong>'+g.totals[k]+'</strong><small>'+label+'</small></div>').join('')+'</div>'+
+    '<div class="button-row"><a class="btn secondary small" href="'+esc(n.url)+'" target="_blank" rel="noopener noreferrer">Consulter ↗</a>'+
+    btn('Explorer cet article','graph-related','secondary small')+'</div></aside></div>';
+}
+
 function renderSettings(){
   const zi=state.zoteroIndex||{user:'',syncedAt:null,count:0,keys:[]};
   const ei=state.externalIndex||{importedAt:null,keys:[],count:0};
