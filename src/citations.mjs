@@ -95,3 +95,21 @@ export function citationLayout(graph){
   spread(graph.groups.related,'related');
   return positions;
 }
+
+/**
+ * Select the visible parts of a citation map without creating or altering edges.
+ * A citation between two third-party nodes is kept only when both are visible.
+ */
+export function filterCitationGraph(graph,enabled={references:true,citing:true,related:true}){
+  if(!graph)return null;
+  const kinds=['references','citing','related'];
+  const groups=Object.fromEntries(kinds.map(kind=>[kind,enabled[kind]===false?[]:[...(graph.groups[kind]||[])]]));
+  const visible=new Set([graph.seed,...kinds.flatMap(kind=>groups[kind])]);
+  const nodes=graph.nodes.filter(n=>visible.has(n.id));
+  const edges=graph.edges.filter(e=>{
+    if(!visible.has(e.source)||!visible.has(e.target))return false;
+    return e.type==='citation'||enabled[e.type]!==false;
+  });
+  return {...graph,nodes,edges,groups,
+    totals:Object.fromEntries(kinds.map(kind=>[kind,groups[kind].length]))};
+}

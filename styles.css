@@ -281,3 +281,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
  #view.session-layout .circle-btn.like{height:57px;width:57px}
  #view.session-layout .swipe-actions{margin-top:5px}
 }
+
+/* Citation graph controls: explicit category filters rather than a busy fixed image. */
+.citation-filters{display:flex;flex-wrap:wrap;gap:7px;margin:13px 0 9px}
+.citation-filter{border:1px solid #d8e7db;border-radius:10px;background:#fff;color:#6e8273;padding:8px 12px;font-size:11px;font-weight:700}
+.citation-filter.active{color:#206440;background:#e8f5ea;border-color:#9dccad}
+.citation-filter:hover{border-color:#4e9e70}
+.citation-filter:focus-visible{outline:3px solid #83c89d}
+.citation-visible-count{font-size:10px;color:#82998a;margin-bottom:8px}

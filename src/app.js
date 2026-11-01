@@ -1,6 +1,6 @@
 import { toArticle, toEuropePMCArticle, deduplicate, openAlexUrl, europePmcUrl, cutoffFromPeriod, fingerprints, zoteroFingerprints, isFresh, asRIS, asCSV, risFingerprints, zoteroItem, resetLocalLibraryState, completeSourcePage } from './core.mjs';
 import { parseScientificQuery, compileScientificQuery, evaluateScientificArticle, themeScope, normalizeSearchText } from './search.mjs';
-import {openAlexWorkId,citationLookupUrl,citationNeighborsUrl,batchWorksUrl,buildCitationGraph,citationLayout} from './citations.mjs';
+import {openAlexWorkId,citationLookupUrl,citationNeighborsUrl,batchWorksUrl,buildCitationGraph,citationLayout,filterCitationGraph} from './citations.mjs';
 import {bibtexFingerprints,scholarSearchUrl,scholarProxyUrl} from './scholar.mjs';
 
 const STORAGE='swipaper-v1-state';
@@ -26,7 +26,7 @@ let swipeAnimationLocked=false;
 let showCompletion=false;
 let mobileFiltersOpen=false;
 let searchError='';
-let graphState={loading:false,data:null,error:'',selected:null,article:null};
+let graphState={loading:false,data:null,error:'',selected:null,article:null,filters:{references:true,citing:true,related:true}};
 const root=document.querySelector('#view');
 const toastBox=document.querySelector('#toast');
 const el=(id)=>document.getElementById(id);
@@ -626,7 +626,7 @@ function importScholarReferences(){
 }
 async function openCitationGraph(article){
   if(!article){showToast('Sélectionnez un article.');return;}
-  graphState={loading:true,data:null,error:'',selected:null,article};
+  graphState={loading:true,data:null,error:'',selected:null,article,filters:{references:true,citing:true,related:true}};
   navigate('graph');
   const key=sessionStorage.getItem('swipaper-openalex')||'';
   async function json(url){
@@ -661,12 +661,15 @@ function renderGraph(){
     btn('Retour à la recherche','go-discover','secondary small'));
   if(graphState.loading){root.innerHTML=intro+'<div class="network-loading"><img src="./assets/giraffe-citations.svg" alt="" width="125"><p>Chargement des relations…</p></div>';return;}
   if(graphState.error||!g){root.innerHTML=intro+empty('Réseau indisponible',graphState.error||'Choisissez un article.',graphState.article?'graph-retry':'go-discover',graphState.article?'Réessayer':'Rechercher');return;}
-  const pos=citationLayout(g),color={seed:'#276448',references:'#67a884',citing:'#d69d60',related:'#849bb8',citation:'#356d54'};
-  const lines=g.edges.map(e=>{
+  const filters=graphState.filters||{references:true,citing:true,related:true};
+  const visible=filterCitationGraph(g,filters);
+  if(!visible.nodes.some(n=>n.id===graphState.selected?.id))graphState.selected=g.nodes[0];
+  const pos=citationLayout(visible),color={seed:'#276448',references:'#67a884',citing:'#d69d60',related:'#849bb8',citation:'#356d54'};
+  const lines=visible.edges.map(e=>{
     const a=pos[e.source],b=pos[e.target];
     return a&&b?'<line x1="'+a.x+'" y1="'+a.y+'" x2="'+b.x+'" y2="'+b.y+'" stroke="'+color[e.type]+'" stroke-width="3" opacity=".5"/>':'';
   }).join('');
-  const nodes=g.nodes.map(n=>{
+  const nodes=visible.nodes.map(n=>{
     const p=pos[n.id];if(!p)return '';
     const radius=n.id===g.seed?34:20;
     const title=n.title.length>30?n.title.slice(0,28)+'…':n.title;
@@ -678,6 +681,9 @@ function renderGraph(){
   const n=graphState.selected||g.nodes[0],groups=[['references','Cités'],['citing','Citants'],['related','Apparentés']];
   root.innerHTML=intro+'<div class="citation-layout"><section class="citation-canvas"><div class="network-legend">'+
     groups.map(([k,label])=>'<span><i style="background:'+color[k]+'"></i>'+label+'</span>').join('')+'</div>'+
+    '<div class="citation-filters" role="group" aria-label="Afficher les relations bibliographiques">'+
+    groups.map(([k,label])=>'<button type="button" data-act="graph-filter" data-kind="'+k+'" aria-pressed="'+(filters[k]!==false)+'" class="citation-filter '+(filters[k]!==false?'active':'')+'">'+label+' · '+g.totals[k]+'</button>').join('')+'</div>'+
+    '<div class="citation-visible-count" role="status">'+visible.nodes.length+' publication(s) affichée(s) sur '+g.nodes.length+'</div>'+
     '<svg class="citation-svg" viewBox="0 0 1020 620" role="group" aria-label="Carte des relations bibliographiques">'+lines+nodes+'</svg>'+
     '<p class="tiny muted">Sélectionnez un nœud. Le graphe présente un échantillon des relations connues.</p></section>'+
     '<aside class="citation-details"><img class="giraffe-variant citation-giraffe" src="./assets/giraffe-citations.svg" alt="">'+
@@ -813,6 +819,11 @@ document.addEventListener('click',event=>{
   if(act==='graph-library'&&state.library[id])openCitationGraph(state.library[id].article);
   if(act==='graph-retry'&&graphState.article)openCitationGraph(graphState.article);
   if(act==='graph-node')selectGraphNode(id);
+  if(act==='graph-filter'&&['references','citing','related'].includes(button.dataset.kind)){
+    const kind=button.dataset.kind;
+    graphState.filters[kind]=graphState.filters[kind]===false;
+    renderGraph();
+  }
   if(act==='graph-related'&&graphState.selected)openCitationGraph({openAlexId:'https://openalex.org/'+graphState.selected.id,title:graphState.selected.title,doi:graphState.selected.doi});
   if(act==='scholar-import')importScholarReferences();
   if(act==='clear-quick-search'){
