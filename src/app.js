@@ -623,7 +623,7 @@ function renderGraph(){
     btn('Retour à la recherche','go-discover','secondary small'));
   if(graphState.loading){root.innerHTML=intro+'<div class="network-loading"><img src="./assets/giraffe-citations.svg" alt="" width="125"><p>Chargement des relations…</p></div>';return;}
   if(graphState.error||!g){root.innerHTML=intro+empty('Réseau indisponible',graphState.error||'Choisissez un article.',graphState.article?'graph-retry':'go-discover',graphState.article?'Réessayer':'Rechercher');return;}
-  const pos=citationLayout(g),color={seed:'#276448',references:'#67a884',citing:'#d69d60',related:'#849bb8'};
+  const pos=citationLayout(g),color={seed:'#276448',references:'#67a884',citing:'#d69d60',related:'#849bb8',citation:'#356d54'};
   const lines=g.edges.map(e=>{
     const a=pos[e.source],b=pos[e.target];
     return a&&b?'<line x1="'+a.x+'" y1="'+a.y+'" x2="'+b.x+'" y2="'+b.y+'" stroke="'+color[e.type]+'" stroke-width="3" opacity=".5"/>':'';

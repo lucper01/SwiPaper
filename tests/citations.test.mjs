@@ -32,3 +32,13 @@ test('citation model handles empty and partial networks without invented nodes',
  assert.equal(graph.totals.citing,0);
  assert.throws(()=>buildCitationGraph({id:'bad'}));
 });
+
+test('network adds actual cross-citation edges without inventing relationships',()=>{
+ const central=work('W2741809807','Main paper',2025);
+ const first=work('W2100837269','First cited paper',2020);
+ const second=work('W2134720587','Second cited paper',2021);
+ first.referenced_works=['https://openalex.org/W2134720587'];
+ const g=buildCitationGraph(central,{references:[first,second]});
+ assert.ok(g.edges.some(e=>e.source==='W2100837269'&&e.target==='W2134720587'&&e.type==='citation'));
+ assert.ok(!g.edges.some(e=>e.source==='W2134720587'&&e.target==='W2100837269'));
+});

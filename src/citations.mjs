@@ -62,6 +62,20 @@ export function buildCitationGraph(seed,{references=[],citing=[],related=[]}={})
       groups[type].push(node.id);
     }
   }
+  // Preserve additional *observed* citation links within the sampled network.
+  // Unlike "related" links, these are backed by referenced_works fields.
+  const known=new Set(nodes.map(n=>n.id));
+  const edgeKeys=new Set(edges.map(e=>e.source+':'+e.target));
+  for(const work of [seed,...references,...citing,...related]){
+    const id=openAlexWorkId(work?.id);
+    if(!id||!known.has(id))continue;
+    for(const reference of work.referenced_works||[]){
+      const to=openAlexWorkId(reference),key=id+':'+to;
+      if(!known.has(to)||to===id||edgeKeys.has(key))continue;
+      edges.push({key:'citation:'+key,source:id,target:to,type:'citation'});
+      edgeKeys.add(key);
+    }
+  }
   return {seed:main.id,nodes,edges,groups,
     totals:{references:groups.references.length,citing:groups.citing.length,related:groups.related.length}};
 }
