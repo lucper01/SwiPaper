@@ -253,7 +253,7 @@ function finishSession(){
 }
 function endScreen(s){
   const c=counts(s.actions);
-  return pageIntro('VOTRE SESSION EST TERMINÉE','Une belle récolte.','Voici le bilan de votre exploration scientifique.')+
+  return pageIntro('SESSION TERMINÉE','Bilan de sélection','Résumé des publications examinées.')+
     '<div class="end-card"><img class="giraffe-variant finish-giraffe" src="./assets/giraffe-success.svg" alt=""><p class="eyebrow" style="color:#b5d5b8">RÉCAPITULATIF</p><h2 class="page-title">Session terminée.</h2><p class="page-subtitle">Vos décisions sont sauvegardées dans votre bibliothèque et votre historique.</p>'+
     '<div class="end-stats"><div><strong>'+s.actions.length+'</strong><small>Parcourus</small></div><div><strong>'+c.liked+'</strong><small>Intéressants</small></div><div><strong>'+c.later+'</strong><small>À revoir</small></div><div><strong>'+c.rejected+'</strong><small>Écartés</small></div></div>'+
     '<div class="end-actions">'+btn('Nouvelle session','reset-summary','primary')+btn('Exporter en RIS','export-last-ris','secondary')+btn('Récap par e-mail','email-last','secondary')+btn('Envoyer vers Zotero','zotero-last','secondary')+'</div></div>'+
@@ -463,7 +463,7 @@ function renderTopics(){
       '<div class="bottom"><span class="tag alt">Recherche stricte</span><div class="button-row"><button type="button" class="text-btn" data-act="edit-topic" data-id="'+esc(t.id)+'">Modifier</button><button type="button" class="text-btn danger" data-act="delete-topic" data-id="'+esc(t.id)+'">Supprimer</button></div></div></article>';
   }).join('');
   const searchScholar=t=>'https://scholar.google.com/scholar?q='+encodeURIComponent(t.query);
-  root.innerHTML=pageIntro('RECHERCHE AVANCÉE','Vos recherches, vos règles.','Créez une stratégie de recherche précise. Les articles devront réellement correspondre à votre expression logique.')+
+  root.innerHTML=pageIntro('THÉMATIQUES','Mes thématiques','Définissez des recherches réutilisables avec des mots-clés précis.')+
     '<div class="advanced-search-layout"><div class="panel query-panel"><div class="query-header"><span class="eyebrow">'+(editing.id?'MODIFIER LA RECHERCHE':'NOUVELLE THÉMATIQUE')+'</span><span class="query-badge">MOTEUR BOOLÉEN</span></div>'+
     '<form id="topic-form" class="form-stack"><input type="hidden" name="topicId" value="'+esc(editing.id)+'">'+
     '<div class="field"><label for="topic-name">NOM DE VOTRE THÉMATIQUE</label><input id="topic-name" name="topicName" required maxlength="70" placeholder="Ex. Intégration olfactive" value="'+esc(editing.name)+'"></div>'+
@@ -532,7 +532,7 @@ function renderLibrary(){
 }
 function renderHistory(){
   const sessions=state.history;
-  root.innerHTML=pageIntro('VOTRE PARCOURS','Vos sessions, en mémoire.','Consultez vos précédentes explorations et exportez les références sélectionnées.')+
+  root.innerHTML=pageIntro('HISTORIQUE','Sessions précédentes','Consultez et exportez les références des sessions terminées.')+
     (sessions.length?'<div class="list-stack">'+sessions.map(s=>{
       const c=counts(s.actions);
       return '<article class="list-card"><div><h3>Session du '+esc(new Date(s.started).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}))+'</h3><p>'+s.actions.length+' articles examinés · '+c.liked+' conservés · '+c.later+' à revoir · '+c.rejected+' écartés</p><span class="tag alt">'+esc(new Date(s.started).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}))+'</span></div><div class="button-row">'+btn('RIS','history-ris','secondary small','data-id="'+esc(s.id)+'"')+btn('E-mail','history-email','secondary small','data-id="'+esc(s.id)+'"')+'</div></article>';
@@ -627,7 +627,7 @@ function renderSettings(){
   const zoteroStatus=state.prefs.zoteroUser&&zi.user===state.prefs.zoteroUser&&zi.syncedAt
     ?zi.count+' références indexées · actualisées le '+new Date(zi.syncedAt).toLocaleString('fr-FR')
     :'Aucune synchronisation Zotero confirmée.';
-  root.innerHTML=pageIntro('PRÉFÉRENCES','Vos bibliothèques, sans doublons.','Liez votre collection de références pour éviter de proposer des articles déjà conservés.')+
+  root.innerHTML=pageIntro('PARAMÈTRES','Bibliothèques associées','Connectez Zotero et gérez les références exclues de vos recherches.')+
     '<div class="session-setup"><div class="panel"><h2 class="section-title">Bibliothèque Zotero</h2>'+
     '<p class="muted tiny" style="line-height:1.8">Swipaper vérifie toutes les références bibliographiques de votre bibliothèque personnelle Zotero avant chaque session. Vous devez fournir un identifiant numérique et une clé API avec permission de lecture ; l’écriture n’est utile que pour exporter vers Zotero.</p>'+
     '<div class="pill-note">'+esc(zoteroStatus)+'</div><div class="spacer"></div>'+
@@ -832,6 +832,9 @@ document.addEventListener('submit',event=>{
   }
 });
 document.addEventListener('keydown',event=>{
+  if(view==='graph'&&(event.key==='Enter'||event.key===' ')&&event.target.closest?.('[data-act="graph-node"]')){
+    event.preventDefault();selectGraphNode(event.target.closest('[data-act="graph-node"]').dataset.id);return;
+  }
   if(event.key==='Escape')el('modal-layer')?.remove();
   if(view!=='discover'||!state.active||event.ctrlKey||event.metaKey||event.altKey)return;
   if(event.target.matches('input,textarea,select,[contenteditable]')||event.target.closest('.modal-layer'))return;

@@ -81,7 +81,7 @@ export function toArticle(work,topic='') {
   const pdf=safeUrl(work.best_oa_location?.pdf_url||work.primary_location?.pdf_url||'');
   return {
     id:doi?'doi:'+doi.toLowerCase():(pmid?'pmid:'+pmid:String(work.id||'').trim()),
-    source:'OpenAlex', title:String(work.title||work.display_name||'Sans titre'),
+    source:'OpenAlex',openAlexId:String(work.id||''), title:String(work.title||work.display_name||'Sans titre'),
     abstract:abstractFromIndex(work.abstract_inverted_index),authors,
     journal:String(work.primary_location?.source?.display_name||work.best_oa_location?.source?.display_name||''),
     year:Number(work.publication_year)||null,date:String(work.publication_date||''),

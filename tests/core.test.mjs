@@ -96,3 +96,8 @@ test('Pagination continues when a full provider page has few locally relevant re
   assert.equal(completeSourcePage(raw.slice(0,12),[],75).hasMore,false);
   assert.equal(completeSourcePage([],[],75).hasMore,false);
 });
+
+test('OpenAlex ID stays available for citation graphs even when an article has a DOI',()=>{
+ const a=toArticle({id:'https://openalex.org/W2741809807',doi:'https://doi.org/10.1234/PAPER',title:'Neural mechanisms of olfactory attention'});
+ assert.equal(a.openAlexId,'https://openalex.org/W2741809807');
+});
