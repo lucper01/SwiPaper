@@ -117,3 +117,47 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .search-error{padding:13px 16px;border:1px solid #f0c7c1;border-radius:12px;background:#fff7f4;color:#a14f44;margin:10px 0 17px;font-size:12px}
 .search-error strong{display:block;font-weight:800;margin-bottom:5px}
 .search-error p{line-height:1.6;margin:0}
+
+/* Stronger focus on the research article than on search controls. */
+@media(min-width:901px){
+ .discover-workspace{grid-template-columns:minmax(260px,.65fr) minmax(0,1.8fr);gap:18px}
+ .discover-workspace>.research-panel{padding:19px 17px}
+ .discover-workspace>.result-panel{padding:24px 27px}
+ .discover-workspace .paper-card{min-height:520px;padding:27px 30px 30px}
+ .discover-workspace .paper-card h2{font-size:clamp(20px,1.8vw,27px);line-height:1.36}
+ .discover-workspace .paper-card .abstract{font-size:13px;line-height:1.85;max-height:260px}
+ .discover-workspace .paper-card .authors,.discover-workspace .paper-card .journal{font-size:12px}
+}
+/* Prevent dropdown and select choices from being covered or clipped by other panels. */
+.discover-workspace{isolation:isolate}
+.discover-workspace>.research-panel{position:relative;z-index:8;overflow:visible}
+.discover-workspace>.result-panel{position:relative;z-index:1}
+.advanced-filters[open]{overflow:visible;position:relative;z-index:12}
+.advanced-filters-inner{overflow:visible}
+.research-panel select,.research-panel input,.research-panel textarea{position:relative;z-index:2}
+.research-panel select{cursor:pointer;min-height:44px;max-width:100%}
+.form-row,.field{min-width:0}
+.paper-stack::before,.paper-stack::after{pointer-events:none}
+/* Visible giraffe neck animation: SVG pivots at the base of its elongated neck. */
+.swipe-scene{overflow:visible;position:relative}
+.swipe-scene .giraffe-control-row{
+ position:absolute;right:-20px;bottom:-27px;z-index:15;
+ width:133px;height:186px;margin:0;display:block;overflow:visible;pointer-events:none;
+}
+.swipe-scene .giraffe-illustration{width:133px;height:186px;display:block;overflow:visible}
+.swipe-scene .giraffe-svg{height:100%;width:100%;display:block;overflow:visible}
+.swipe-scene .giraffe-motion{
+ transform-box:view-box;transform-origin:90px 216px;
+ transform:rotate(var(--neck-angle,0deg));
+ transition:transform .12s ease-out;
+}
+.swipe-scene.swipe-to-left .giraffe-motion{animation:giraffe-left .46s ease-out both}
+.swipe-scene.swipe-to-right .giraffe-motion{animation:giraffe-right .46s ease-out both}
+.swipe-scene.swipe-to-later .giraffe-motion{animation:giraffe-nod .46s ease-out both}
+@media(max-width:720px){
+ .swipe-scene .giraffe-control-row{right:-10px;bottom:-25px;width:105px;height:145px}
+ .swipe-scene .giraffe-illustration{width:105px;height:145px}
+}
+@media(prefers-reduced-motion:reduce){
+ .swipe-scene .giraffe-motion{transition:none!important}
+}

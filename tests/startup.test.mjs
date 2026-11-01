@@ -53,3 +53,19 @@ test('Primary navigation renders without crashing',()=>{
   assert.ok(registry.get('view').innerHTML.length>300,'Page '+page+' renders');
  }
 });
+
+test('Returning to Discover after a completed session resets the discovery panel only',()=>{
+ const {context,registry}=startApp();
+ vm.runInContext("state.lastSummary={id:'s1',started:'2026-10-30',ended:'2026-10-30',actions:[]};showCompletion=true;render();",context);
+ assert.match(registry.get('view').innerHTML,/Session terminée/);
+ vm.runInContext("navigate('library');navigate('discover');",context);
+ assert.match(registry.get('view').innerHTML,/session-form/);
+ assert.doesNotMatch(registry.get('view').innerHTML,/Session terminée/);
+ assert.equal(vm.runInContext('state.lastSummary.id',context),'s1');
+});
+test('New session button returns to search, preserving previous history',()=>{
+ const {context,registry}=startApp();
+ vm.runInContext("state.lastSummary={id:'s1',started:'2026-10-30',ended:'2026-10-30',actions:[]};state.history=[state.lastSummary];showCompletion=true;state.lastSummary=null;showCompletion=false;render();",context);
+ assert.match(registry.get('view').innerHTML,/session-form/);
+ assert.equal(vm.runInContext('state.history.length',context),1);
+});

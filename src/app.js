@@ -23,6 +23,7 @@ let loading=false;
 let toastTimer;
 let installing=null;
 let swipeAnimationLocked=false;
+let showCompletion=false;
 let mobileFiltersOpen=false;
 let searchError='';
 let graphState={loading:false,data:null,error:'',selected:null,article:null};
@@ -98,6 +99,8 @@ function render(){
 }
 function navigate(next){
   if(!TITLES[next])return;
+  // The completion screen is shown once. Revisiting Discover opens a new search.
+  if(next==='discover'||view==='discover')showCompletion=false;
   view=next;location.hash=next;render();window.scrollTo({top:0,behavior:'instant'});
 }
 function updateQuickQueryFeedback(){
@@ -174,7 +177,7 @@ function paperCard(a){
     (a.pdf?'<a href="'+esc(a.pdf)+'" target="_blank" rel="noopener noreferrer">↗ PDF disponible</a>':'')+'</div></article>';
 }
 function renderDiscover(){
-  if(!state.active){root.innerHTML=state.lastSummary?endScreen(state.lastSummary):setup();updateQuickQueryFeedback();return;}
+  if(!state.active){root.innerHTML=showCompletion&&state.lastSummary?endScreen(state.lastSummary):setup();updateQuickQueryFeedback();return;}
   const sess=state.active;
   const article=sess.articles[sess.index];
   if(!article){finishSession();return;}
@@ -207,6 +210,7 @@ function animatedDecision(decision){
   const scene=el('swipe-scene');
   const prefersLessMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches===true;
   if(!scene||prefersLessMotion){decide(decision);return;}
+  scene.style.removeProperty('--neck-angle');
   swipeAnimationLocked=true;
   scene.classList.add(decision==='liked'?'swipe-to-right':decision==='rejected'?'swipe-to-left':'swipe-to-later');
   document.querySelectorAll('.swipe-actions button').forEach(button=>button.disabled=true);
@@ -251,6 +255,7 @@ function finishSession(){
   state.history=state.history.slice(0,60);
   state.active=null;
   state.lastSummary=summary;
+  showCompletion=true;
   saveAndRender();
 }
 function endScreen(s){
@@ -426,6 +431,7 @@ async function startSession(form){
 }
 function attachSwipe(){
   const card=el('swipe-card');if(!card)return;
+  const scene=el('swipe-scene');scene?.style.removeProperty('--neck-angle');
   let pointer=null;
   card.addEventListener('pointerdown',event=>{
     if(event.target.closest('a,button,input,select,textarea,[data-act]')||(event.pointerType==='mouse'&&event.target.closest('.abstract')))return;
@@ -439,6 +445,7 @@ function attachSwipe(){
     pointer.dx=event.clientX-pointer.x;pointer.dy=event.clientY-pointer.y;
     if(Math.abs(pointer.dx)>12&&Math.abs(pointer.dx)>Math.abs(pointer.dy)){
       card.style.transform='translateX('+Math.max(-170,Math.min(170,pointer.dx))+'px) rotate('+(pointer.dx/27)+'deg)';
+      scene?.style.setProperty('--neck-angle',Math.max(-28,Math.min(28,pointer.dx*.2))+'deg');
     }
   });
   function end(event){
@@ -446,9 +453,10 @@ function attachSwipe(){
     const dx=pointer.dx,dy=pointer.dy;
     pointer=null;card.classList.remove('dragging');card.style.transform='';
     if(Math.abs(dx)>95&&Math.abs(dx)>Math.abs(dy)*1.3)animatedDecision(dx>0?'liked':'rejected');
+    else scene?.style.removeProperty('--neck-angle');
   }
   card.addEventListener('pointerup',end);
-  card.addEventListener('pointercancel',()=>{pointer=null;card.style.transform='';card.classList.remove('dragging');});
+  card.addEventListener('pointercancel',()=>{pointer=null;card.style.transform='';card.classList.remove('dragging');scene?.style.removeProperty('--neck-angle');});
 }
 async function checkNewPapers(manual=false) {
   if(alertLoading||!navigator.onLine)return;
@@ -763,7 +771,7 @@ document.addEventListener('click',event=>{
   if(act==='later')animatedDecision('later');
   if(act==='undo')undo();
   if(act==='finish'&&!swipeAnimationLocked){if(confirm('Terminer cette session maintenant ? Les articles non examinés ne seront pas comptabilisés.'))finishSession();}
-  if(act==='reset-summary'){state.lastSummary=null;saveAndRender();}
+  if(act==='reset-summary'){showCompletion=false;state.lastSummary=null;saveAndRender();}
   if(act==='go-discover')navigate('discover');
   if(act==='go-topics')navigate('topics');
   if(act==='go-settings')navigate('settings');
@@ -883,7 +891,7 @@ document.addEventListener('keydown',event=>{
   if(event.key==='ArrowDown'){event.preventDefault();animatedDecision('later');}
   if(event.key==='Backspace'){event.preventDefault();undo();}
 });
-window.addEventListener('hashchange',()=>{view=TITLES[location.hash.slice(1)]?location.hash.slice(1):'discover';render();});
+window.addEventListener('hashchange',()=>{showCompletion=false;view=TITLES[location.hash.slice(1)]?location.hash.slice(1):'discover';render();});
 function updateNetwork(){
   const online=navigator.onLine;
   el('online-label').textContent=online?'En ligne':'Hors ligne';
